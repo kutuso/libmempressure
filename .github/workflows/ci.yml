@@ -1,0 +1,27 @@
+name: ci
+on:
+  push:
+    branches: ["*"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        compiler: [gcc, clang]
+    env:
+      CC: ${{ matrix.compiler }}
+      CXX: ${{ matrix.compiler == 'gcc' && 'g++' || 'clang++' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: install pytest
+        run: pip install pytest
+      - name: configure + build (python binding pinned to CI python, jdk autodetected)
+        run: |
+          cmake -S . -B build -DPython3_EXECUTABLE=$(which python3)
+          cmake --build build
+      - name: ctest (c core, c++ binding, jvm binding)
+        run: ctest --test-dir build --output-on-failure
+      - name: python binding tests
+        run: python3 -m pytest tests/python -q

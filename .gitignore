@@ -1,0 +1,11 @@
+build/
+.venv/
+venv/
+java-classes/
+*.so
+*.so.*
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+compile_commands.json
