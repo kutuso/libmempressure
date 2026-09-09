@@ -53,6 +53,8 @@ jobs:
       - name: install rpm build tools
         run: dnf -y install git rpm-build cmake gcc-c++ make
       - uses: actions/checkout@v4
+      - name: trust the runner-owned checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: build source tarball
         run: |
           version=$(sed -n 's/^  VERSION \([0-9.]*\)$/\1/p' CMakeLists.txt | head -1)
