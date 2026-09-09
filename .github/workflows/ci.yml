@@ -76,8 +76,11 @@ jobs:
       - name: install deb build tools
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends git build-essential cmake debhelper pkg-config
-      - uses: actions/checkout@v4
+          apt-get install -y --no-install-recommends git ca-certificates build-essential cmake debhelper pkg-config
+      - name: checkout with the container's own git
+        run: |
+          git clone --depth 1 --branch "$GITHUB_REF_NAME" \
+            "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" .
       - name: dpkg-buildpackage
         run: dpkg-buildpackage -us -uc -b
       - name: inspect packages
