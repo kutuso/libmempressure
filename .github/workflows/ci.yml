@@ -45,3 +45,41 @@ jobs:
           cmake --build build
       - name: ctest (native suites under sanitizers)
         run: ctest --test-dir build --output-on-failure -R "core|cpp"
+
+  package-rpm:
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - name: install rpm build tools
+        run: dnf -y install git rpm-build cmake gcc-c++ make
+      - uses: actions/checkout@v4
+      - name: build source tarball
+        run: |
+          version=$(sed -n 's/^  VERSION \([0-9.]*\)$/\1/p' CMakeLists.txt | head -1)
+          git archive --prefix=libmempressure-${version}/ -o libmempressure-${version}.tar.gz HEAD
+          mkdir -p rpmbuild/SOURCES
+          cp libmempressure-${version}.tar.gz rpmbuild/SOURCES/
+      - name: rpmbuild
+        run: rpmbuild -bb --define "_topdir $PWD/rpmbuild" packaging/rpm/libmempressure.spec
+      - name: inspect packages
+        run: |
+          ls rpmbuild/RPMS/*/
+          rpm -qlp rpmbuild/RPMS/*/libmempressure-0.1.0-*.rpm
+          rpm -qlp rpmbuild/RPMS/*/libmempressure-devel-0.1.0-*.rpm
+
+  package-deb:
+    runs-on: ubuntu-latest
+    container: debian:latest
+    steps:
+      - name: install deb build tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git build-essential cmake debhelper pkg-config
+      - uses: actions/checkout@v4
+      - name: dpkg-buildpackage
+        run: dpkg-buildpackage -us -uc -b
+      - name: inspect packages
+        run: |
+          ls -1 ../libmempressure*deb
+          dpkg-deb -c ../libmempressure0_*.deb
+          dpkg-deb -c ../libmempressure-dev_*.deb

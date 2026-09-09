@@ -1,0 +1,6 @@
+libmempressure (0.1.0) unstable; urgency=medium
+
+  * Initial release of libmempressure: memory-pressure events from
+    kernel PSI for C, C++, JVM and Python.
+
+ -- kutu OS contributors <release@kutu.so>  Wed, 09 Sep 2026 12:00:00 +0000

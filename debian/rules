@@ -1,0 +1,10 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@ --buildsystem=cmake
+
+override_dh_auto_configure:
+	dh_auto_configure -- -DCMAKE_BUILD_TYPE=Release -DMP_PYTHON=OFF -DMP_JAVA=OFF
+
+override_dh_auto_test:
+	dh_auto_test --buildsystem=cmake -- test ARGS+="--output-on-failure"

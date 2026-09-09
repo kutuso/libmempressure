@@ -1,0 +1,30 @@
+Source: libmempressure
+Section: libs
+Priority: optional
+Maintainer: kutu OS contributors <release@kutu.so>
+Build-Depends: debhelper-compat (= 13),
+ cmake (>= 3.16),
+ g++,
+ pkg-config
+Standards-Version: 4.6.2
+Homepage: https://github.com/kutuso/libmempressure
+Rules-Requires-Root: no
+
+Package: libmempressure0
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Memory-pressure events from kernel PSI for applications
+ libmempressure turns the kernel's Pressure Stall Information (PSI)
+ into application-level memory-pressure events: a Linux answer to
+ Android's onTrimMemory(). Instead of being killed by the OOM killer,
+ applications learn that memory is getting tight and shed caches
+ gracefully.
+
+Package: libmempressure-dev
+Section: libdevel
+Architecture: any
+Depends: libmempressure0 (= ${binary:Version}), ${misc:Depends}
+Description: Development files for libmempressure
+ Headers (C and the header-only C++ binding), the pkg-config file and
+ the versioned symlink needed to build applications against
+ libmempressure.

@@ -1,0 +1,35 @@
+Start testing: Sep 09 18:32 IST
+----------------------------------------------------------
+1/2 Testing: core
+1/2 Test: core
+Command: "/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-distro/mp_test"
+Directory: /run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-distro
+"core" start time: Sep 09 18:32 IST
+Output:
+----------------------------------------------------------
+C TESTS: ALL PASS
+<end of output>
+Test time =   0.14 sec
+----------------------------------------------------------
+Test Passed.
+"core" end time: Sep 09 18:32 IST
+"core" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/2 Testing: cpp
+2/2 Test: cpp
+Command: "/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-distro/mp_test_cpp"
+Directory: /run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-distro
+"cpp" start time: Sep 09 18:32 IST
+Output:
+----------------------------------------------------------
+CPP TESTS: ALL PASS
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"cpp" end time: Sep 09 18:32 IST
+"cpp" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Sep 09 18:32 IST

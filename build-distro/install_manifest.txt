@@ -1,0 +1,6 @@
+/usr/local/lib/libmempressure.so.0.1.0
+/usr/local/lib/libmempressure.so.0
+/usr/local/lib/libmempressure.so
+/usr/local/include/mempressure.h
+/usr/local/include/mempressure.hpp
+/usr/local/lib/pkgconfig/mempressure.pc

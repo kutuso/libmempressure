@@ -1,0 +1,3 @@
+usr/include/*
+usr/lib/*/libmempressure.so
+usr/lib/*/pkgconfig/*

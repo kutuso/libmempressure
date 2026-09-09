@@ -1,0 +1,12 @@
+/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-distro/CMakeFiles/mempressure.dir
+/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-distro/CMakeFiles/mp_test.dir
+/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-distro/CMakeFiles/mp_test_cpp.dir
+/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-distro/CMakeFiles/mp_example_c.dir
+/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-distro/CMakeFiles/mp_example_cpp.dir
+/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-distro/CMakeFiles/test.dir
+/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-distro/CMakeFiles/edit_cache.dir
+/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-distro/CMakeFiles/rebuild_cache.dir
+/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-distro/CMakeFiles/list_install_components.dir
+/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-distro/CMakeFiles/install.dir
+/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-distro/CMakeFiles/install/local.dir
+/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-distro/CMakeFiles/install/strip.dir

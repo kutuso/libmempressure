@@ -106,6 +106,34 @@ fixture files via `psi_path` and mutate them to drive level changes. The
 example binary (`mp_example_c`) runs against your real
 `/proc/pressure/memory`.
 
+## Distro packaging (RPM / DEB)
+
+The library is plain C11 + pthreads and installs via CMake's GNUInstallDirs,
+so it lands correctly on any FHS distro (including `/usr/lib64` RPM
+convention). Upstream ships packaging metadata:
+
+- **RPM** (Fedora/RHEL/openSUSE): [`packaging/rpm/libmempressure.spec`](packaging/rpm/libmempressure.spec).
+  Build a tarball and rpmbuild it, or point a COPR at the spec:
+
+  ```sh
+  git archive --prefix=libmempressure-0.1.0/ -o libmempressure-0.1.0.tar.gz HEAD
+  rpmbuild -bb packaging/rpm/libmempressure.spec --define "_sourcedir $PWD"
+  ```
+
+- **DEB** (Debian/Ubuntu): a `debian/` directory with `libmempressure0`
+  (runtime) and `libmempressure-dev` packages, native-format source:
+
+  ```sh
+  sudo apt install build-essential cmake debhelper pkg-config
+  dpkg-buildpackage -us -uc -b
+  ```
+
+Distro packages ship the C core and the header-only C++ binding
+(`-DMP_PYTHON=OFF -DMP_JAVA=OFF` in the build); the Python and JVM bindings
+are built from the same source wherever those toolchains live. CI exercises
+both paths on every push: `package-rpm` (fedora container) and
+`package-deb` (debian container) build and inspect the actual packages.
+
 ## Relationship to kutu OS
 
 This is the M3 building block of
