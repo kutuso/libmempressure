@@ -155,6 +155,11 @@ static PyMethodDef methods[] = {
     {NULL, NULL, 0, NULL},
 };
 
+static void free_module_state(void *module) {
+    (void)module;
+    Py_CLEAR(g_handles);
+}
+
 static struct PyModuleDef module_def = {
     PyModuleDef_HEAD_INIT,
     "mempressure",
@@ -164,7 +169,7 @@ static struct PyModuleDef module_def = {
     NULL,
     NULL,
     NULL,
-    NULL,
+    free_module_state,
 };
 
 PyMODINIT_FUNC PyInit_mempressure(void) {

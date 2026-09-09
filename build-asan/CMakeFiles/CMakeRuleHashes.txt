@@ -1,0 +1,3 @@
+# Hashes of file build rules.
+3150490f495325c7d00cbcfe42fcdb90 CMakeFiles/java_classes
+66ca3d738e2fb06d3a38fffecf4902ef java-classes/MemPressure.class

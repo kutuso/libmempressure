@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-asan/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

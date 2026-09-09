@@ -4,6 +4,9 @@ on:
     branches: ["*"]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -25,3 +28,20 @@ jobs:
         run: ctest --test-dir build --output-on-failure
       - name: python binding tests
         run: python3 -m pytest tests/python -q
+
+  sanitize:
+    runs-on: ubuntu-latest
+    env:
+      CC: gcc
+    steps:
+      - uses: actions/checkout@v4
+      - name: configure with asan + ubsan
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -g" \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -g" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address,undefined"
+          cmake --build build
+      - name: ctest (native suites under sanitizers)
+        run: ctest --test-dir build --output-on-failure -R "core|cpp"

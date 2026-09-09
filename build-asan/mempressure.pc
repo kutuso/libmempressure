@@ -1,0 +1,9 @@
+prefix=/usr/local
+libdir=${prefix}/lib
+includedir=${prefix}/include
+
+Name: mempressure
+Description: libmempressure: a Linux answer to Android's onTrimMemory
+Version: 0.1.0
+Libs: -L${libdir} -lmempressure
+Cflags: -I${includedir}

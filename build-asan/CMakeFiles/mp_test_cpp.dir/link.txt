@@ -1,0 +1,1 @@
+/usr/bin/c++ -fsanitize=address,undefined -fno-omit-frame-pointer -g -fsanitize=address,undefined -Wl,--dependency-file=CMakeFiles/mp_test_cpp.dir/link.d CMakeFiles/mp_test_cpp.dir/tests/test_cpp.cpp.o -o mp_test_cpp  -Wl,-rpath,/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-asan libmempressure.so.0.1.0

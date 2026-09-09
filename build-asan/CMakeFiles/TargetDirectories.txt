@@ -1,0 +1,15 @@
+/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-asan/CMakeFiles/mempressure.dir
+/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-asan/CMakeFiles/mp_test.dir
+/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-asan/CMakeFiles/mp_test_cpp.dir
+/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-asan/CMakeFiles/mp_example_c.dir
+/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-asan/CMakeFiles/mp_example_cpp.dir
+/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-asan/CMakeFiles/mempressure_python.dir
+/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-asan/CMakeFiles/mempressure_jni.dir
+/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-asan/CMakeFiles/java_classes.dir
+/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-asan/CMakeFiles/test.dir
+/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-asan/CMakeFiles/edit_cache.dir
+/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-asan/CMakeFiles/rebuild_cache.dir
+/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-asan/CMakeFiles/list_install_components.dir
+/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-asan/CMakeFiles/install.dir
+/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-asan/CMakeFiles/install/local.dir
+/run/media/ixaxaar/src/code/src/ORGS/kutuso/libmempressure/build-asan/CMakeFiles/install/strip.dir
