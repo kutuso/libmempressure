@@ -1,3 +1,26 @@
+Metadata-Version: 2.4
+Name: libmempressure
+Version: 0.1.0
+Summary: Memory-pressure events from kernel PSI: an onTrimMemory for Linux (Python binding)
+Author: kutu OS contributors
+License-Expression: MIT
+Project-URL: Homepage, https://kutu.so
+Project-URL: Repository, https://github.com/kutuso/libmempressure
+Project-URL: Documentation, https://kutu.so/#/LIBMEMPRESSURE.md
+Keywords: memory,psi,pressure,linux,oom,swap,performance
+Classifier: Development Status :: 4 - Beta
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Programming Language :: C
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Topic :: System :: Operating System Kernels :: Linux
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Dynamic: license-file
+
 # libmempressure — a Linux answer to Android's onTrimMemory
 
 Apps on Android never get OOM-killed without warning: the OS sends them
@@ -82,13 +105,6 @@ mp.stop()
 
 CPython extension (`mempressure` module) built against your interpreter;
 callbacks fire with the GIL acquired from the monitor thread.
-
-Install from PyPI — the sdist statically compiles the C core, so you need
-a C compiler (`gcc`/`clang` + Python headers) on the machine:
-
-```sh
-pip install libmempressure
-```
 
 ## Build and test
 

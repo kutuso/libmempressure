@@ -1,0 +1,5 @@
+include LICENSE
+include README.md
+include src/mempressure.c
+include include/mempressure.h
+include bindings/python/mempressure_module.c

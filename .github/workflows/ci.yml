@@ -88,3 +88,20 @@ jobs:
           ls -1 ../libmempressure*deb
           dpkg-deb -c ../libmempressure0_*.deb
           dpkg-deb -c ../libmempressure-dev_*.deb
+
+  python-sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: build sdist
+        run: |
+          pip install build twine
+          python -m build --sdist
+          twine check dist/*
+      - name: install from the sdist and smoke it
+        run: |
+          pip install dist/*.tar.gz
+          python -c "import mempressure as mp; mp.start(); print('ok', mp.__version__); mp.stop()"

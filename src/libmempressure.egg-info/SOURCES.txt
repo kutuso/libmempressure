@@ -1,0 +1,12 @@
+LICENSE
+MANIFEST.in
+README.md
+pyproject.toml
+setup.py
+bindings/python/mempressure_module.c
+include/mempressure.h
+src/mempressure.c
+src/libmempressure.egg-info/PKG-INFO
+src/libmempressure.egg-info/SOURCES.txt
+src/libmempressure.egg-info/dependency_links.txt
+src/libmempressure.egg-info/top_level.txt
