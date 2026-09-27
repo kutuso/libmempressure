@@ -49,8 +49,11 @@ typedef struct {
 
 /* Start the monitor thread. cfg may be NULL for all defaults; zero fields in
  * cfg also fall back to their defaults (so partial overrides just work).
- * Returns 0, or -EALREADY if already running, -EAGAIN while a previous
- * monitor is still shutting down, -EINVAL for a bad config. */
+ * The configured psi_path is read once synchronously, so a missing,
+ * unreadable, or malformed source fails here instead of silently
+ * reporting zero pressure. Returns 0, or -EALREADY if already running,
+ * -EAGAIN while a previous monitor is still shutting down, -EINVAL for a
+ * bad config, or the errno from the initial read (e.g. -ENOENT). */
 int mp_init(const mp_config_t *cfg);
 
 /* Stop the monitor thread and release everything. The monitor wakes

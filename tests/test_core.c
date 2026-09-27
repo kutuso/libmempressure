@@ -191,6 +191,16 @@ static void test_lifecycle(void) {
     CHECK(mp_subscribe(on_level, NULL) == -EPERM);
     CHECK(mp_init(&(mp_config_t){.low_threshold = -1}) == -EINVAL);
     CHECK(mp_init(&(mp_config_t){.critical_threshold = 1.0}) == -EINVAL);
+    CHECK(mp_init(&(mp_config_t){.poll_interval_sec = -1}) == -EINVAL);
+    CHECK(mp_init(&(mp_config_t){.hysteresis = -3}) == -EINVAL);
+    CHECK(mp_init(&(mp_config_t){.low_threshold = 7}) == 0);
+    mp_psi_t partial = {0};
+    CHECK(mp_psi(&partial) == 0 && partial.some_avg10 == 0.0);
+    CHECK(mp_shutdown() == 0);
+    cfg.psi_path = "/tmp/mp_test_missing.psi";
+    unlink(cfg.psi_path);
+    CHECK(mp_init(&cfg) == -ENOENT);
+    cfg.psi_path = path;
 
     CHECK(mp_init(&cfg) == 0);
     CHECK(mp_init(&cfg) == -EALREADY);

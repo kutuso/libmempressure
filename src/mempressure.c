@@ -3,6 +3,8 @@
 #include "mempressure.h"
 
 #include <errno.h>
+#include <locale.h>
+#include <math.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -68,29 +70,49 @@ static void wait_interval(double seconds) {
 }
 
 static int parse_line(const char *line, const char *kind, mp_psi_t *out) {
-    if (strncmp(line, kind, strlen(kind)) != 0) {
+    size_t klen = strlen(kind);
+    if (strncmp(line, kind, klen) != 0) {
         return 0;
     }
-    const char *cursor = line + strlen(kind);
-    while (*cursor == ' ') cursor++;
+    const char *cursor = line + klen;
+    if (*cursor != ' ' && *cursor != '\t') {
+        return 0;
+    }
+    static locale_t c_loc;
+    if (!c_loc) {
+        c_loc = newlocale(LC_NUMERIC_MASK, "C", (locale_t)0);
+    }
+    int have_avg10 = 0;
+    int have_avg60 = 0;
+    int have_avg300 = 0;
+    while (*cursor == ' ' || *cursor == '\t') cursor++;
     char key[8];
-    double value;
-    int matched = 0;
-    while (sscanf(cursor, "%7[a-z0-9_]=%lf", key, &value) == 2) {
-        if (strcmp(kind, "some") == 0) {
-            if (strcmp(key, "avg10") == 0) { out->some_avg10 = value; matched++; }
-            else if (strcmp(key, "avg60") == 0) { out->some_avg60 = value; matched++; }
-            else if (strcmp(key, "avg300") == 0) { out->some_avg300 = value; matched++; }
-        } else {
-            if (strcmp(key, "avg10") == 0) { out->full_avg10 = value; matched++; }
-            else if (strcmp(key, "avg60") == 0) { out->full_avg60 = value; matched++; }
-            else if (strcmp(key, "avg300") == 0) { out->full_avg300 = value; matched++; }
+    while (sscanf(cursor, "%7[a-z0-9_]=", key) == 1) {
+        cursor += strlen(key) + 1;
+        char *end = NULL;
+        double value = c_loc ? strtod_l(cursor, &end, c_loc) : strtod(cursor, &end);
+        if (end == cursor) {
+            break;
         }
-        while (*cursor && *cursor != ' ') cursor++;
-        while (*cursor == ' ') cursor++;
+        if (isfinite(value)) {
+            int is_some = strcmp(kind, "some") == 0;
+            if (strcmp(key, "avg10") == 0 && !have_avg10) {
+                if (is_some) out->some_avg10 = value; else out->full_avg10 = value;
+                have_avg10 = 1;
+            } else if (strcmp(key, "avg60") == 0 && !have_avg60) {
+                if (is_some) out->some_avg60 = value; else out->full_avg60 = value;
+                have_avg60 = 1;
+            } else if (strcmp(key, "avg300") == 0 && !have_avg300) {
+                if (is_some) out->some_avg300 = value; else out->full_avg300 = value;
+                have_avg300 = 1;
+            }
+        }
+        cursor = end;
+        while (*cursor && *cursor != ' ' && *cursor != '\t') cursor++;
+        while (*cursor == ' ' || *cursor == '\t') cursor++;
         if (!*cursor) break;
     }
-    return matched == 3;
+    return have_avg10 && have_avg60 && have_avg300;
 }
 
 static int read_psi(const char *path, mp_psi_t *out) {
@@ -195,26 +217,37 @@ static void *monitor_main(void *arg) {
 }
 
 static int config_valid(const mp_config_t *cfg) {
+    if (!isfinite(cfg->low_threshold) || !isfinite(cfg->moderate_threshold) ||
+        !isfinite(cfg->critical_threshold) || !isfinite(cfg->poll_interval_sec)) {
+        return 0;
+    }
     if (cfg->low_threshold < 0 || cfg->moderate_threshold <= cfg->low_threshold ||
         cfg->critical_threshold <= cfg->moderate_threshold || cfg->critical_threshold > 100) {
         return 0;
     }
-    if (!(cfg->poll_interval_sec > 0) || cfg->hysteresis < 1) {
+    if (cfg->poll_interval_sec <= 0 || cfg->poll_interval_sec > 86400.0) {
+        return 0;
+    }
+    if (cfg->hysteresis < 1 || cfg->hysteresis > 1000) {
         return 0;
     }
     return 1;
 }
 
 static void config_fill_defaults(mp_config_t *cfg) {
-    if (cfg->low_threshold == 0 && cfg->moderate_threshold == 0 && cfg->critical_threshold == 0) {
+    if (cfg->low_threshold == 0) {
         cfg->low_threshold = 5.0;
+    }
+    if (cfg->moderate_threshold == 0) {
         cfg->moderate_threshold = 15.0;
+    }
+    if (cfg->critical_threshold == 0) {
         cfg->critical_threshold = 40.0;
     }
-    if (!(cfg->poll_interval_sec > 0)) {
+    if (cfg->poll_interval_sec == 0) {
         cfg->poll_interval_sec = 0.5;
     }
-    if (cfg->hysteresis < 1) {
+    if (cfg->hysteresis == 0) {
         cfg->hysteresis = 2;
     }
 }
@@ -243,7 +276,15 @@ int mp_init(const mp_config_t *cfg) {
         pthread_mutex_unlock(&g.lock);
         return -ENOMEM;
     }
-    g.psi = (mp_psi_t){0};
+    mp_psi_t initial;
+    int rc = read_psi(g.psi_path, &initial);
+    if (rc != 0) {
+        free(g.psi_path);
+        g.psi_path = NULL;
+        pthread_mutex_unlock(&g.lock);
+        return rc;
+    }
+    g.psi = initial;
     g.level = MP_LEVEL_NONE;
     g.pending = MP_LEVEL_NONE;
     g.pending_count = 0;
@@ -251,14 +292,14 @@ int mp_init(const mp_config_t *cfg) {
     g.subs = NULL;
     g.running = 1;
     g.started = 1;
-    int rc = pthread_create(&g.thread, NULL, monitor_main, NULL);
-    if (rc != 0) {
+    int create_rc = pthread_create(&g.thread, NULL, monitor_main, NULL);
+    if (create_rc != 0) {
         free(g.psi_path);
         g.psi_path = NULL;
         g.started = 0;
         g.running = 0;
         pthread_mutex_unlock(&g.lock);
-        return -rc;
+        return -create_rc;
     }
     pthread_mutex_unlock(&g.lock);
     return 0;
@@ -341,6 +382,11 @@ int mp_subscribe(mp_callback_t cb, void *userdata) {
     if (!sub) {
         pthread_mutex_unlock(&g.lock);
         return -ENOMEM;
+    }
+    if (g.next_handle < 0) {
+        free(sub);
+        pthread_mutex_unlock(&g.lock);
+        return -ENOSPC;
     }
     sub->handle = g.next_handle++;
     sub->refs = 1;
