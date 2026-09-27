@@ -49,10 +49,13 @@ typedef struct {
 
 /* Start the monitor thread. cfg may be NULL for all defaults; zero fields in
  * cfg also fall back to their defaults (so partial overrides just work).
- * Returns 0, or -EALREADY if already running, -EINVAL for a bad config. */
+ * Returns 0, or -EALREADY if already running, -EAGAIN while a previous
+ * monitor is still shutting down, -EINVAL for a bad config. */
 int mp_init(const mp_config_t *cfg);
 
-/* Stop the monitor thread and release everything. Idempotent. */
+/* Stop the monitor thread and release everything. The monitor wakes
+ * immediately instead of finishing its poll interval. Idempotent;
+ * returns -EDEADLK if called from a callback on the monitor thread. */
 int mp_shutdown(void);
 
 /* Current (post-hysteresis) pressure level. Valid after mp_init. */

@@ -32,6 +32,7 @@ static struct {
     pthread_t thread;
     int started;
     int running;
+    int stopping;
     mp_config_t cfg;
     char *psi_path;
     mp_psi_t psi;
@@ -45,12 +46,25 @@ static struct {
     .cv = PTHREAD_COND_INITIALIZER,
 };
 
-static void sleep_sec(double seconds) {
-    struct timespec ts = {
-        .tv_sec = (time_t)seconds,
-        .tv_nsec = (long)((seconds - (double)(time_t)seconds) * 1e9),
-    };
-    nanosleep(&ts, NULL);
+static void wait_interval(double seconds) {
+    if (seconds > 86400.0) {
+        seconds = 86400.0;
+    }
+    struct timespec until;
+    clock_gettime(CLOCK_REALTIME, &until);
+    until.tv_sec += (time_t)seconds;
+    until.tv_nsec += (long)((seconds - (double)(time_t)seconds) * 1e9);
+    while (until.tv_nsec >= 1000000000L) {
+        until.tv_nsec -= 1000000000L;
+        until.tv_sec++;
+    }
+    pthread_mutex_lock(&g.lock);
+    while (g.running) {
+        if (pthread_cond_timedwait(&g.cv, &g.lock, &until) == ETIMEDOUT) {
+            break;
+        }
+    }
+    pthread_mutex_unlock(&g.lock);
 }
 
 static int parse_line(const char *line, const char *kind, mp_psi_t *out) {
@@ -175,7 +189,7 @@ static void *monitor_main(void *arg) {
             }
             free(fire_subs);
         }
-        sleep_sec(cfg.poll_interval_sec);
+        wait_interval(cfg.poll_interval_sec);
     }
     return NULL;
 }
@@ -211,6 +225,10 @@ int mp_init(const mp_config_t *cfg) {
         pthread_mutex_unlock(&g.lock);
         return -EALREADY;
     }
+    if (g.stopping) {
+        pthread_mutex_unlock(&g.lock);
+        return -EAGAIN;
+    }
     memset(&g.cfg, 0, sizeof g.cfg);
     if (cfg) {
         g.cfg = *cfg;
@@ -233,13 +251,14 @@ int mp_init(const mp_config_t *cfg) {
     g.subs = NULL;
     g.running = 1;
     g.started = 1;
-    if (pthread_create(&g.thread, NULL, monitor_main, NULL) != 0) {
+    int rc = pthread_create(&g.thread, NULL, monitor_main, NULL);
+    if (rc != 0) {
         free(g.psi_path);
         g.psi_path = NULL;
         g.started = 0;
         g.running = 0;
         pthread_mutex_unlock(&g.lock);
-        return -errno;
+        return -rc;
     }
     pthread_mutex_unlock(&g.lock);
     return 0;
@@ -247,10 +266,21 @@ int mp_init(const mp_config_t *cfg) {
 
 int mp_shutdown(void) {
     pthread_mutex_lock(&g.lock);
-    if (!g.started) {
-        pthread_mutex_unlock(&g.lock);
-        return 0;
+    while (1) {
+        if (!g.started && !g.stopping) {
+            pthread_mutex_unlock(&g.lock);
+            return 0;
+        }
+        if (g.started && pthread_equal(pthread_self(), g.thread)) {
+            pthread_mutex_unlock(&g.lock);
+            return -EDEADLK;
+        }
+        if (!g.stopping) {
+            break;
+        }
+        pthread_cond_wait(&g.cv, &g.lock);
     }
+    g.stopping = 1;
     g.running = 0;
     pthread_t thread = g.thread;
     sub_t *subs = g.subs;
@@ -258,9 +288,10 @@ int mp_shutdown(void) {
     char *psi_path = g.psi_path;
     g.psi_path = NULL;
     g.started = 0;
+    pthread_cond_broadcast(&g.cv);
     pthread_mutex_unlock(&g.lock);
 
-    pthread_join(thread, NULL);
+    int rc = pthread_join(thread, NULL);
     while (subs) {
         sub_t *next = subs->next;
         free(subs);
@@ -268,9 +299,12 @@ int mp_shutdown(void) {
     }
     free(psi_path);
     pthread_mutex_lock(&g.lock);
+    g.level = MP_LEVEL_NONE;
+    g.psi = (mp_psi_t){0};
+    g.stopping = 0;
     pthread_cond_broadcast(&g.cv);
     pthread_mutex_unlock(&g.lock);
-    return 0;
+    return rc == 0 ? 0 : -rc;
 }
 
 mp_level_t mp_current_level(void) {
