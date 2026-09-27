@@ -5,6 +5,7 @@
 #include "mempressure.h"
 
 #include <errno.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -147,6 +148,38 @@ static void test_unsubscribe_from_callback(void) {
     mp_shutdown();
 }
 
+static atomic_int quiesce_hits;
+
+static void quiesce_cb(mp_level_t level, void *userdata) {
+    (void)level;
+    (void)userdata;
+    atomic_fetch_add(&quiesce_hits, 1);
+}
+
+static void test_unsubscribe_quiesces(void) {
+    current_test = "unsubscribe-quiesces";
+    const char *path = "/tmp/mp_test_quiesce.psi";
+    write_psi(path, 0.0, 0.0);
+    mp_config_t cfg = test_config(path);
+    CHECK(mp_init(&cfg) == 0);
+    atomic_store(&quiesce_hits, 0);
+    int handle = mp_subscribe(quiesce_cb, NULL);
+    CHECK(handle > 0);
+
+    write_psi(path, 60.0, 0.0);
+    CHECK(WAIT_FOR(atomic_load(&quiesce_hits) >= 1, 2000));
+
+    CHECK(mp_unsubscribe(handle) == 0);
+    int after = atomic_load(&quiesce_hits);
+    usleep(200000);
+    CHECK(atomic_load(&quiesce_hits) == after);
+
+    write_psi(path, 0.0, 0.0);
+    usleep(100000);
+    CHECK(atomic_load(&quiesce_hits) == after);
+    mp_shutdown();
+}
+
 static void test_lifecycle(void) {
     current_test = "lifecycle";
     const char *path = "/tmp/mp_test_lifecycle.psi";
@@ -175,6 +208,7 @@ int main(void) {
     test_levels();
     test_callback_fires_on_change();
     test_unsubscribe_from_callback();
+    test_unsubscribe_quiesces();
     test_lifecycle();
     if (failures) {
         fprintf(stderr, "C TESTS: FAIL (%d failures)\n", failures);

@@ -13,18 +13,22 @@
 
 typedef struct sub {
     int handle;
+    int refs;
+    int canceled;
     mp_callback_t cb;
     void *userdata;
     struct sub *next;
 } sub_t;
 
 typedef struct {
+    sub_t *sub;
     mp_callback_t cb;
     void *userdata;
 } sub_snapshot_t;
 
 static struct {
     pthread_mutex_t lock;
+    pthread_cond_t cv;
     pthread_t thread;
     int started;
     int running;
@@ -38,6 +42,7 @@ static struct {
     sub_t *subs;
 } g = {
     .lock = PTHREAD_MUTEX_INITIALIZER,
+    .cv = PTHREAD_COND_INITIALIZER,
 };
 
 static void sleep_sec(double seconds) {
@@ -99,12 +104,6 @@ static mp_level_t level_for(const mp_psi_t *psi, const mp_config_t *cfg) {
     return MP_LEVEL_NONE;
 }
 
-typedef struct fire {
-    sub_snapshot_t *subs;
-    int count;
-    mp_level_t level;
-} fire_t;
-
 static void *monitor_main(void *arg) {
     (void)arg;
     const mp_config_t cfg = g.cfg;
@@ -130,39 +129,51 @@ static void *monitor_main(void *arg) {
                 g.pending_count++;
             }
 
-            int changed = 0;
+            sub_snapshot_t *fire_subs = NULL;
+            int fire_count = 0;
             mp_level_t fire_level = g.level;
             if (g.pending_count >= cfg.hysteresis && g.pending != g.level) {
-                g.level = g.pending;
-                fire_level = g.level;
-                changed = 1;
-            }
-
-            fire_t fire = {NULL, 0, fire_level};
-            if (changed) {
                 int n = 0;
                 for (sub_t *s = g.subs; s; s = s->next) n++;
                 if (n > 0) {
-                    fire.subs = malloc((size_t)n * sizeof *fire.subs);
-                    if (fire.subs) {
-                        fire.count = n;
+                    fire_subs = malloc((size_t)n * sizeof *fire_subs);
+                    if (fire_subs) {
+                        fire_count = n;
                         int i = 0;
                         for (sub_t *s = g.subs; s; s = s->next) {
-                            fire.subs[i].cb = s->cb;
-                            fire.subs[i].userdata = s->userdata;
+                            s->refs++;
+                            fire_subs[i].sub = s;
+                            fire_subs[i].cb = s->cb;
+                            fire_subs[i].userdata = s->userdata;
                             i++;
                         }
                     }
                 }
+                if (n == 0 || fire_subs) {
+                    g.level = g.pending;
+                    fire_level = g.level;
+                }
             }
             pthread_mutex_unlock(&g.lock);
 
-            if (fire.subs) {
-                for (int i = 0; i < fire.count; i++) {
-                    fire.subs[i].cb(fire.level, fire.subs[i].userdata);
+            for (int i = 0; i < fire_count; i++) {
+                sub_t *s = fire_subs[i].sub;
+                pthread_mutex_lock(&g.lock);
+                int skip = s->canceled;
+                pthread_mutex_unlock(&g.lock);
+                if (!skip) {
+                    fire_subs[i].cb(fire_level, fire_subs[i].userdata);
                 }
-                free(fire.subs);
+                pthread_mutex_lock(&g.lock);
+                s->refs--;
+                int free_now = s->refs == 0 && s->canceled;
+                pthread_cond_broadcast(&g.cv);
+                pthread_mutex_unlock(&g.lock);
+                if (free_now) {
+                    free(s);
+                }
             }
+            free(fire_subs);
         }
         sleep_sec(cfg.poll_interval_sec);
     }
@@ -256,6 +267,9 @@ int mp_shutdown(void) {
         subs = next;
     }
     free(psi_path);
+    pthread_mutex_lock(&g.lock);
+    pthread_cond_broadcast(&g.cv);
+    pthread_mutex_unlock(&g.lock);
     return 0;
 }
 
@@ -295,6 +309,8 @@ int mp_subscribe(mp_callback_t cb, void *userdata) {
         return -ENOMEM;
     }
     sub->handle = g.next_handle++;
+    sub->refs = 1;
+    sub->canceled = 0;
     sub->cb = cb;
     sub->userdata = userdata;
     sub->next = g.subs;
@@ -307,18 +323,32 @@ int mp_subscribe(mp_callback_t cb, void *userdata) {
 int mp_unsubscribe(int handle) {
     pthread_mutex_lock(&g.lock);
     sub_t **cursor = &g.subs;
-    while (*cursor) {
-        if ((*cursor)->handle == handle) {
-            sub_t *dead = *cursor;
-            *cursor = dead->next;
-            free(dead);
-            pthread_mutex_unlock(&g.lock);
-            return 0;
-        }
+    while (*cursor && (*cursor)->handle != handle) {
         cursor = &(*cursor)->next;
     }
+    if (!*cursor) {
+        pthread_mutex_unlock(&g.lock);
+        return -ENOENT;
+    }
+    sub_t *dead = *cursor;
+    *cursor = dead->next;
+    dead->next = NULL;
+    dead->refs--;
+    if (pthread_equal(pthread_self(), g.thread)) {
+        dead->canceled = 1;
+        int free_now = dead->refs == 0;
+        pthread_mutex_unlock(&g.lock);
+        if (free_now) {
+            free(dead);
+        }
+        return 0;
+    }
+    while (dead->refs > 0) {
+        pthread_cond_wait(&g.cv, &g.lock);
+    }
     pthread_mutex_unlock(&g.lock);
-    return -ENOENT;
+    free(dead);
+    return 0;
 }
 
 const char *mp_level_name(mp_level_t level) {

@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-#define MP_VERSION "0.1.0"
+#define MP_VERSION "0.2.0"
 #define MP_PSI_PATH_DEFAULT "/proc/pressure/memory"
 
 typedef enum {
@@ -67,8 +67,11 @@ int mp_psi(mp_psi_t *out);
  * callback. */
 int mp_subscribe(mp_callback_t cb, void *userdata);
 
-/* Remove a subscription. Returns 0, or -ENOENT. Safe to call from within a
- * callback for any handle except the one currently being dispatched. */
+/* Remove a subscription. Once this returns, the callback and userdata are
+ * guaranteed not to be invoked again and may be released: from other
+ * threads it waits for any in-progress dispatch of this subscription to
+ * finish, and from inside a callback (any handle, including the one
+ * firing) it cancels without waiting. Returns 0, or -ENOENT. */
 int mp_unsubscribe(int handle);
 
 const char *mp_level_name(mp_level_t level);
