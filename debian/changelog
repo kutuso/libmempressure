@@ -1,6 +1,9 @@
-libmempressure (0.1.0) unstable; urgency=medium
+libmempressure (0.2.0) unstable; urgency=medium
 
-  * Initial release of libmempressure: memory-pressure events from
-    kernel PSI for C, C++, JVM and Python.
+  * Quiescing mp_unsubscribe: safe callback teardown from any thread.
+  * Shutdown ordering fixes, -EDEADLK from callbacks, prompt wake.
+  * Config and psi source validation up front; robust c-locale parser.
+  * Python gil deadlock fix; c++ exception-safe wrapper; jni registry
+    cleanup.
 
- -- kutu OS contributors <release@kutu.so>  Wed, 09 Sep 2026 12:00:00 +0000
+ -- kutu OS contributors <release@kutu.so>  Mon, 28 Sep 2026 02:27:51 +0000

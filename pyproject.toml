@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "libmempressure"
-version = "0.1.0"
+version = "0.2.0"
 description = "Memory-pressure events from kernel PSI: an onTrimMemory for Linux (Python binding)"
 readme = "README.md"
 license = "MIT"

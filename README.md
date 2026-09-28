@@ -36,10 +36,18 @@ mp_shutdown();
 ```
 
 `mp_config_t` tunes thresholds (5/15/40%), poll interval (0.5s) and
-hysteresis (2 readings); any zero field falls back to its default. See
-[`include/mempressure.h`](include/mempressure.h) for the full contract —
-threading rules, error codes, and the `psi_path` override (used by the test
-suites to drive the monitor from fixture files).
+hysteresis (2 readings); any zero field falls back to its default, so
+partial overrides work. `mp_init` also reads the PSI source once up
+front: a missing or malformed path (or a kernel without PSI) fails
+immediately with e.g. `-ENOENT` instead of silently reporting zero
+pressure forever. `mp_unsubscribe` quiesces — once it returns, the
+callback and userdata will never be invoked again, so they can be freed
+immediately (this also holds when unsubscribing from inside a callback);
+`mp_shutdown` refuses to self-join from a callback (`-EDEADLK`) and
+wakes the monitor immediately instead of finishing its poll interval.
+See [`include/mempressure.h`](include/mempressure.h) for the full
+contract — threading rules, error codes, and the `psi_path` override
+(used by the test suites to drive the monitor from fixture files).
 
 ## C++
 
@@ -123,7 +131,7 @@ convention). Upstream ships packaging metadata:
   Build a tarball and rpmbuild it, or point a COPR at the spec:
 
   ```sh
-  git archive --prefix=libmempressure-0.1.0/ -o libmempressure-0.1.0.tar.gz HEAD
+  git archive --prefix=libmempressure-<version>/ -o libmempressure-<version>.tar.gz HEAD
   rpmbuild -bb packaging/rpm/libmempressure.spec --define "_sourcedir $PWD"
   ```
 
