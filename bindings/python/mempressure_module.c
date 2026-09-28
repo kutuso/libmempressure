@@ -29,7 +29,7 @@ static PyObject *py_start(PyObject *self, PyObject *args, PyObject *kwds) {
     int hysteresis = 2;
     const char *psi_path = NULL;
     static char *kwlist[] = {"low", "moderate", "critical", "interval", "hysteresis", "psi_path", NULL};
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|ddddis", kwlist, &low, &moderate, &critical,
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|ddddiz", kwlist, &low, &moderate, &critical,
                                      &interval, &hysteresis, &psi_path)) {
         return NULL;
     }
@@ -55,7 +55,12 @@ static PyObject *py_start(PyObject *self, PyObject *args, PyObject *kwds) {
 static PyObject *py_stop(PyObject *self, PyObject *args) {
     (void)self;
     (void)args;
+    Py_BEGIN_ALLOW_THREADS
     mp_shutdown();
+    Py_END_ALLOW_THREADS
+    if (g_handles) {
+        PyDict_Clear(g_handles);
+    }
     g_started = 0;
     Py_RETURN_NONE;
 }
@@ -112,10 +117,21 @@ static PyObject *py_subscribe(PyObject *self, PyObject *callback) {
         return NULL;
     }
     PyObject *key = PyLong_FromLong(handle);
-    PyDict_SetItem(g_handles, key, callback);
+    if (!key || PyDict_SetItem(g_handles, key, callback) != 0) {
+        Py_XDECREF(key);
+        Py_BEGIN_ALLOW_THREADS
+        mp_unsubscribe(handle);
+        Py_END_ALLOW_THREADS
+        Py_DECREF(callback);
+        if (!PyErr_Occurred()) {
+            PyErr_SetString(PyExc_RuntimeError, "failed to register callback");
+        }
+        return NULL;
+    }
     Py_DECREF(key);
     Py_DECREF(callback);  // dict owns the strong ref now
-    return PyLong_FromLong(handle);
+    PyObject *result = PyLong_FromLong(handle);
+    return result;
 }
 
 static PyObject *py_unsubscribe(PyObject *self, PyObject *args) {
@@ -124,9 +140,16 @@ static PyObject *py_unsubscribe(PyObject *self, PyObject *args) {
     if (!PyArg_ParseTuple(args, "i", &handle)) {
         return NULL;
     }
-    int rc = mp_unsubscribe(handle);
+    int rc = 0;
+    Py_BEGIN_ALLOW_THREADS
+    rc = mp_unsubscribe(handle);
+    Py_END_ALLOW_THREADS
     if (rc == -ENOENT) {
         PyErr_SetString(PyExc_ValueError, "unknown handle");
+        return NULL;
+    }
+    if (rc != 0) {
+        PyErr_Format(PyExc_RuntimeError, "mp_unsubscribe failed: %d", rc);
         return NULL;
     }
     PyObject *key = PyLong_FromLong(handle);
@@ -180,14 +203,49 @@ PyMODINIT_FUNC PyInit_mempressure(void) {
     PyObject *module = PyModule_Create(&module_def);
     if (!module) {
         Py_DECREF(g_handles);
+        g_handles = NULL;
         return NULL;
     }
-    PyModule_AddStringConstant(module, "__version__", MP_VERSION);
+    if (PyModule_AddStringConstant(module, "__version__", MP_VERSION) != 0) {
+        Py_DECREF(module);
+        Py_DECREF(g_handles);
+        g_handles = NULL;
+        return NULL;
+    }
     PyObject *levels = PyDict_New();
-    PyDict_SetItemString(levels, "NONE", PyLong_FromLong(MP_LEVEL_NONE));
-    PyDict_SetItemString(levels, "LOW", PyLong_FromLong(MP_LEVEL_LOW));
-    PyDict_SetItemString(levels, "MODERATE", PyLong_FromLong(MP_LEVEL_MODERATE));
-    PyDict_SetItemString(levels, "CRITICAL", PyLong_FromLong(MP_LEVEL_CRITICAL));
-    PyModule_AddObject(module, "LEVELS", levels);
+    if (!levels) {
+        Py_DECREF(module);
+        Py_DECREF(g_handles);
+        g_handles = NULL;
+        return NULL;
+    }
+    static const struct {
+        const char *name;
+        long value;
+    } level_entries[] = {
+        {"NONE", MP_LEVEL_NONE},
+        {"LOW", MP_LEVEL_LOW},
+        {"MODERATE", MP_LEVEL_MODERATE},
+        {"CRITICAL", MP_LEVEL_CRITICAL},
+    };
+    for (size_t i = 0; i < sizeof level_entries / sizeof level_entries[0]; i++) {
+        PyObject *num = PyLong_FromLong(level_entries[i].value);
+        if (!num || PyDict_SetItemString(levels, level_entries[i].name, num) != 0) {
+            Py_XDECREF(num);
+            Py_DECREF(levels);
+            Py_DECREF(module);
+            Py_DECREF(g_handles);
+            g_handles = NULL;
+            return NULL;
+        }
+        Py_DECREF(num);
+    }
+    if (PyModule_AddObject(module, "LEVELS", levels) != 0) {
+        Py_DECREF(levels);
+        Py_DECREF(module);
+        Py_DECREF(g_handles);
+        g_handles = NULL;
+        return NULL;
+    }
     return module;
 }

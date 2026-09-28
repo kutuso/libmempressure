@@ -1,3 +1,4 @@
+import threading
 import time
 
 import pytest
@@ -79,3 +80,37 @@ def test_invalid_config(tmp_path):
     with pytest.raises(RuntimeError):
         mp.start(critical=1.0)
     assert mp.current_level() in (0, 1, 2, 3)
+
+
+def test_unsubscribe_quiesces(tmp_path):
+    fixture = tmp_path / "psi"
+    write_psi(fixture, 0.0)
+    events = []
+    assert mp.start(psi_path=str(fixture), interval=0.02, hysteresis=1)
+    handle = mp.subscribe(events.append)
+
+    write_psi(fixture, 60.0)
+    assert wait_until(lambda: len(events) >= 1)
+
+    mp.unsubscribe(handle)
+    after = len(events)
+    time.sleep(0.2)
+    assert len(events) == after
+    write_psi(fixture, 0.0)
+    time.sleep(0.1)
+    assert len(events) == after
+    mp.stop()
+
+
+def test_stop_from_thread_while_firing(tmp_path):
+    fixture = tmp_path / "psi"
+    write_psi(fixture, 0.0)
+    events = []
+    assert mp.start(psi_path=str(fixture), interval=0.02, hysteresis=1)
+    mp.subscribe(events.append)
+
+    write_psi(fixture, 60.0)
+    stopper = threading.Thread(target=mp.stop)
+    stopper.start()
+    stopper.join(timeout=5)
+    assert not stopper.is_alive(), "stop() deadlocked against a callback acquiring the GIL"
