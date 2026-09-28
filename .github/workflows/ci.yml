@@ -17,7 +17,7 @@ jobs:
       CC: ${{ matrix.compiler }}
       CXX: ${{ matrix.compiler == 'gcc' && 'g++' || 'clang++' }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: install pytest
         run: pip install pytest
       - name: configure + build (python binding pinned to CI python, jdk autodetected)
@@ -34,7 +34,7 @@ jobs:
     env:
       CC: gcc
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: configure with asan + ubsan
         run: |
           cmake -S . -B build \
@@ -52,7 +52,7 @@ jobs:
     steps:
       - name: install rpm build tools
         run: dnf -y install git rpm-build cmake gcc-c++ make
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: trust the runner-owned checkout
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: build source tarball
@@ -92,7 +92,7 @@ jobs:
   python-sdist:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.13"
