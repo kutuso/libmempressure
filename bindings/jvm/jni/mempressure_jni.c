@@ -29,20 +29,25 @@ static struct {
     .lock = PTHREAD_MUTEX_INITIALIZER,
 };
 
-static void registry_add(jsub_t *js) {
+static int registry_add(jsub_t *js) {
     pthread_mutex_lock(&g_registry.lock);
     if (g_registry.count == g_registry.capacity) {
-        size_t next = g_registry.capacity ? g_registry.capacity * 2 : 8;
-        jsub_t **grown = realloc(g_registry.items, next * sizeof *g_registry.items);
-        if (grown) {
-            g_registry.items = grown;
-            g_registry.capacity = next;
+        if (g_registry.capacity > ((size_t)-1) / 2) {
+            pthread_mutex_unlock(&g_registry.lock);
+            return -ENOMEM;
         }
+        size_t next = g_registry.capacity ? g_registry.capacity * 2 : 8;
+        jsub_t **grown = realloc(g_registry.items, next * sizeof *grown);
+        if (!grown) {
+            pthread_mutex_unlock(&g_registry.lock);
+            return -ENOMEM;
+        }
+        g_registry.items = grown;
+        g_registry.capacity = next;
     }
-    if (g_registry.count < g_registry.capacity) {
-        g_registry.items[g_registry.count++] = js;
-    }
+    g_registry.items[g_registry.count++] = js;
     pthread_mutex_unlock(&g_registry.lock);
+    return 0;
 }
 
 static jsub_t *registry_take(int handle) {
@@ -124,9 +129,15 @@ JNIEXPORT void JNICALL Java_io_kutu_mempressure_MemPressure_start(
 }
 
 JNIEXPORT void JNICALL Java_io_kutu_mempressure_MemPressure_stop(JNIEnv *env, jclass cls) {
-    (void)env;
     (void)cls;
     mp_shutdown();
+    pthread_mutex_lock(&g_registry.lock);
+    for (size_t i = 0; i < g_registry.count; i++) {
+        (*env)->DeleteGlobalRef(env, g_registry.items[i]->cb_ref);
+        free(g_registry.items[i]);
+    }
+    g_registry.count = 0;
+    pthread_mutex_unlock(&g_registry.lock);
 }
 
 JNIEXPORT jint JNICALL Java_io_kutu_mempressure_MemPressure_currentLevel(JNIEnv *env, jclass cls) {
@@ -138,8 +149,17 @@ JNIEXPORT jint JNICALL Java_io_kutu_mempressure_MemPressure_currentLevel(JNIEnv 
 JNIEXPORT jdoubleArray JNICALL Java_io_kutu_mempressure_MemPressure_psi(JNIEnv *env, jclass cls) {
     (void)cls;
     mp_psi_t psi = {0};
-    mp_psi(&psi);
+    if (mp_psi(&psi) != 0) {
+        jclass ex = (*env)->FindClass(env, "io/kutu/mempressure/MemPressure$MemPressureException");
+        if (ex) {
+            (*env)->ThrowNew(env, ex, "monitor not started");
+        }
+        return NULL;
+    }
     jdoubleArray out = (*env)->NewDoubleArray(env, 6);
+    if (!out) {
+        return NULL;
+    }
     double values[6] = {
         psi.some_avg10, psi.some_avg60, psi.some_avg300,
         psi.full_avg10, psi.full_avg60, psi.full_avg300,
@@ -169,7 +189,16 @@ JNIEXPORT jint JNICALL Java_io_kutu_mempressure_MemPressure_subscribe(
         return handle;
     }
     js->handle = handle;
-    registry_add(js);
+    if (registry_add(js) != 0) {
+        mp_unsubscribe(handle);
+        (*env)->DeleteGlobalRef(env, js->cb_ref);
+        free(js);
+        jclass oom = (*env)->FindClass(env, "java/lang/OutOfMemoryError");
+        if (oom) {
+            (*env)->ThrowNew(env, oom, "subscription registry growth failed");
+        }
+        return -ENOMEM;
+    }
     return handle;
 }
 

@@ -96,13 +96,13 @@ static void test_levels(void) {
     mp_shutdown();
 }
 
-static int callback_hits = 0;
-static mp_level_t callback_level = -1;
+static atomic_int callback_hits;
+static atomic_int callback_level;
 
 static void on_level(mp_level_t level, void *userdata) {
     (void)userdata;
-    callback_hits++;
-    callback_level = level;
+    atomic_fetch_add(&callback_hits, 1);
+    atomic_store(&callback_level, (int)level);
 }
 
 static void test_callback_fires_on_change(void) {
@@ -111,15 +111,17 @@ static void test_callback_fires_on_change(void) {
     write_psi(path, 0.0, 0.0);
     mp_config_t cfg = test_config(path);
     CHECK(mp_init(&cfg) == 0);
+    atomic_store(&callback_hits, 0);
+    atomic_store(&callback_level, -1);
     int handle = mp_subscribe(on_level, NULL);
     CHECK(handle > 0);
 
     write_psi(path, 60.0, 0.0);
-    CHECK(WAIT_FOR(callback_level == MP_LEVEL_CRITICAL, 2000));
+    CHECK(WAIT_FOR(atomic_load(&callback_level) == MP_LEVEL_CRITICAL, 2000));
 
     write_psi(path, 0.0, 0.0);
-    CHECK(WAIT_FOR(callback_level == MP_LEVEL_NONE, 2000));
-    CHECK(callback_hits >= 2);
+    CHECK(WAIT_FOR(atomic_load(&callback_level) == MP_LEVEL_NONE, 2000));
+    CHECK(atomic_load(&callback_hits) >= 2);
     mp_shutdown();
     mp_unsubscribe(handle);
 }

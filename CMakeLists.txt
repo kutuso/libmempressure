@@ -82,15 +82,15 @@ if(NOT MP_JAVA STREQUAL "OFF")
     if(Java_Development_FOUND)
       set(JAVA_CLASSES ${CMAKE_BINARY_DIR}/java-classes)
       file(MAKE_DIRECTORY ${JAVA_CLASSES})
-      add_custom_command(
-        OUTPUT ${JAVA_CLASSES}/MemPressure.class
-        COMMAND ${Java_JAVAC_EXECUTABLE} -d ${JAVA_CLASSES}
-                ${CMAKE_SOURCE_DIR}/bindings/jvm/java/io/kutu/mempressure/MemPressure.java
-                ${CMAKE_SOURCE_DIR}/bindings/jvm/test/MemPressureTest.java
-        DEPENDS bindings/jvm/java/io/kutu/mempressure/MemPressure.java
-                bindings/jvm/test/MemPressureTest.java)
+    add_custom_command(
+      OUTPUT ${JAVA_CLASSES}/io/kutu/mempressure/MemPressure.class
+      COMMAND ${Java_JAVAC_EXECUTABLE} -d ${JAVA_CLASSES}
+              ${CMAKE_SOURCE_DIR}/bindings/jvm/java/io/kutu/mempressure/MemPressure.java
+              ${CMAKE_SOURCE_DIR}/bindings/jvm/test/MemPressureTest.java
+      DEPENDS bindings/jvm/java/io/kutu/mempressure/MemPressure.java
+              bindings/jvm/test/MemPressureTest.java)
       add_custom_target(java_classes ALL
-        DEPENDS ${JAVA_CLASSES}/MemPressure.class)
+        DEPENDS ${JAVA_CLASSES}/io/kutu/mempressure/MemPressure.class)
       add_test(NAME java
         COMMAND ${Java_JAVA_EXECUTABLE}
           -Djava.library.path=$<TARGET_FILE_DIR:mempressure_jni>
