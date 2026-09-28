@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cstdio>
 #include <fstream>
+#include <stdexcept>
 #include <thread>
 
 static void write_psi(const std::string &path, double some10) {
@@ -61,6 +62,24 @@ int main() {
     } catch (const std::exception &e) {
         CHECK(false);
         fprintf(stderr, "restart failed: %s\n", e.what());
+    }
+
+    {
+        mp::Monitor shared(cfg);
+        mp::Monitor second(cfg);  // shares the singleton instead of throwing -EALREADY
+        std::atomic<int> hits{0};
+        second.subscribe([&](mp::Level) {
+            hits++;
+            throw std::runtime_error("boom");  // must not terminate the process
+        });
+        std::atomic<int> clean_hits{0};
+        shared.subscribe([&](mp::Level) { clean_hits++; });
+        write_psi(path, 60.0);
+        for (int i = 0; i < 400 && (hits < 1 || clean_hits < 1); i++) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        CHECK(hits >= 1);
+        CHECK(clean_hits >= 1);  // delivery continues past a throwing callback
     }
 
     if (failures) {

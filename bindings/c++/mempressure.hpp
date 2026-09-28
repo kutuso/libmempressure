@@ -8,9 +8,11 @@
 
 #include <mempressure.h>
 
+#include <atomic>
 #include <functional>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace mp {
@@ -65,14 +67,14 @@ class Monitor {
     void start(const Config &cfg = Config()) {
         mp_config_t c = to_c(cfg);
         int rc = mp_init(&c);
-        if (rc != 0) {
+        if (rc != 0 && rc != -EALREADY) {
             throw std::runtime_error("mp_init failed: " + std::to_string(rc));
         }
         refcount()++;
     }
 
     void stop() {
-        if (refcount() > 0 && --refcount() == 0) {
+        if (refcount().load() > 0 && refcount().fetch_sub(1) == 1) {
             mp_shutdown();
         }
     }
@@ -82,39 +84,57 @@ class Monitor {
     }
 
     // Callbacks fire from the monitor thread on level changes; keep them fast.
+    // Exceptions escaping a callback are swallowed on the monitor thread (the
+    // C boundary would otherwise terminate the process).
     void subscribe(Callback callback) {
         auto *box = new Callback(std::move(callback));
         int handle = mp_subscribe(
             [](mp_level_t level, void *userdata) {
                 auto *cb = static_cast<Callback *>(userdata);
-                (*cb)(static_cast<Level>(level));
+                try {
+                    (*cb)(static_cast<Level>(level));
+                } catch (...) {
+                }
             },
             box);
         if (handle < 0) {
             delete box;
             throw std::runtime_error("mp_subscribe failed: " + std::to_string(handle));
         }
-        boxes_.push_back(box);
-        ids_.push_back(handle);
+        try {
+            subs_.push_back({box, handle});
+        } catch (...) {
+            mp_unsubscribe(handle);
+            delete box;
+            throw;
+        }
     }
 
     void unsubscribeAll() {
-        for (size_t i = 0; i < ids_.size(); i++) {
-            mp_unsubscribe(ids_[i]);
-            delete static_cast<Callback *>(boxes_[i]);
+        size_t keep = 0;
+        for (size_t i = 0; i < subs_.size(); i++) {
+            int rc = mp_unsubscribe(subs_[i].handle);
+            if (rc == 0 || rc == -ENOENT) {
+                delete subs_[i].box;
+            } else {
+                subs_[keep++] = subs_[i];
+            }
         }
-        boxes_.clear();
-        ids_.clear();
+        subs_.resize(keep);
     }
 
   private:
-    static int &refcount() {
-        static int count = 0;
+    static std::atomic<int> &refcount() {
+        static std::atomic<int> count{0};
         return count;
     }
 
-    std::vector<Callback *> boxes_;
-    std::vector<int> ids_;
+    struct Sub {
+        Callback *box;
+        int handle;
+    };
+
+    std::vector<Sub> subs_;
 };
 
 }  // namespace mp
