@@ -11,7 +11,7 @@ depends=('glibc')
 makedepends=('cmake')
 checkdepends=('binutils')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('4772859a141dc81e989790227ba4265a49d6cb030c1f278381ee6e6e7b1facf1')
 
 build() {
   cmake -S "$pkgname-$pkgver" -B build \

@@ -11,7 +11,7 @@ license=('MIT')
 depends=('python' 'glibc')
 makedepends=('python-build' 'python-installer' 'python-setuptools' 'python-wheel')
 source=("$_pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('4772859a141dc81e989790227ba4265a49d6cb030c1f278381ee6e6e7b1facf1')
 
 build() {
   cd "$_pkgname-$pkgver"
