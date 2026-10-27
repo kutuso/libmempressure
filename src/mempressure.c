@@ -3,6 +3,7 @@
 #include "mempressure.h"
 
 #include <errno.h>
+#include <limits.h>
 #include <math.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -47,12 +48,23 @@ static struct {
     .cv = PTHREAD_COND_INITIALIZER,
 };
 
+__attribute__((constructor)) static void init_monotonic_cv(void) {
+    pthread_condattr_t attr;
+    if (pthread_condattr_init(&attr) != 0) {
+        return;
+    }
+    if (pthread_condattr_setclock(&attr, CLOCK_MONOTONIC) == 0) {
+        pthread_cond_init(&g.cv, &attr);
+    }
+    pthread_condattr_destroy(&attr);
+}
+
 static void wait_interval(double seconds) {
     if (seconds > 86400.0) {
         seconds = 86400.0;
     }
     struct timespec until;
-    clock_gettime(CLOCK_REALTIME, &until);
+    clock_gettime(CLOCK_MONOTONIC, &until);
     until.tv_sec += (time_t)seconds;
     until.tv_nsec += (long)((seconds - (double)(time_t)seconds) * 1e9);
     while (until.tv_nsec >= 1000000000L) {
@@ -414,7 +426,7 @@ int mp_subscribe(mp_callback_t cb, void *userdata) {
         pthread_mutex_unlock(&g.lock);
         return -ENOMEM;
     }
-    if (g.next_handle < 0) {
+    if (g.next_handle == INT_MAX) {
         free(sub);
         pthread_mutex_unlock(&g.lock);
         return -ENOSPC;
