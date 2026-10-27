@@ -68,6 +68,40 @@ public class MemPressureTest {
         } catch (MemPressure.MemPressureException expected) {
             // the monitor is stopped; the JNI layer must report it
         }
+
+        write(p, 0.0);
+        MemPressure.start(cfg);
+        final AtomicInteger stopRejected = new AtomicInteger();
+        final AtomicInteger others = new AtomicInteger();
+        MemPressure.subscribe(
+                level -> {
+                    try {
+                        MemPressure.stop();
+                    } catch (MemPressure.MemPressureException expected) {
+                        stopRejected.incrementAndGet();
+                    }
+                });
+        MemPressure.subscribe(level -> others.incrementAndGet());
+        write(p, 60.0);
+        deadline = System.currentTimeMillis() + 3000;
+        while (System.currentTimeMillis() < deadline && (stopRejected.get() == 0 || others.get() == 0)) {
+            Thread.sleep(5);
+        }
+        check(stopRejected.get() >= 1, "stop() inside a callback throws");
+        write(p, 0.0);
+        deadline = System.currentTimeMillis() + 3000;
+        while (System.currentTimeMillis() < deadline && others.get() < 2) {
+            Thread.sleep(5);
+        }
+        check(others.get() >= 2, "subscriptions survive a rejected stop()");
+        check(MemPressure.currentLevel() == 0, "monitor still running");
+        MemPressure.stop();
+
+        try {
+            MemPressure.subscribe(level -> {});
+            check(false, "subscribe() while stopped should throw");
+        } catch (MemPressure.MemPressureException expected) {
+        }
         Files.deleteIfExists(p);
 
         if (failures > 0) {

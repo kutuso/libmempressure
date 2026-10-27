@@ -3,10 +3,24 @@
 #include <errno.h>
 #include <jni.h>
 #include <pthread.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 static JavaVM *g_vm;
+
+static void throw_mp(JNIEnv *env, const char *what, int rc) {
+    if ((*env)->ExceptionCheck(env)) {
+        return;
+    }
+    jclass ex = (*env)->FindClass(env, "io/kutu/mempressure/MemPressure$MemPressureException");
+    if (!ex) {
+        return;
+    }
+    char msg[160];
+    snprintf(msg, sizeof msg, "%s: %s (%d)", what, strerror(-rc), rc);
+    (*env)->ThrowNew(env, ex, msg);
+}
 
 jint JNI_OnLoad(JavaVM *vm, void *reserved) {
     (void)reserved;
@@ -86,6 +100,13 @@ static void jni_trampoline(mp_level_t level, void *userdata) {
 JNIEXPORT void JNICALL Java_io_kutu_mempressure_MemPressure_start(
     JNIEnv *env, jclass cls, jobject jcfg) {
     (void)cls;
+    if (!jcfg) {
+        jclass npe = (*env)->FindClass(env, "java/lang/NullPointerException");
+        if (npe) {
+            (*env)->ThrowNew(env, npe, "cfg");
+        }
+        return;
+    }
     mp_config_t cfg = {0};
     cfg.low_threshold = 5.0;
     cfg.moderate_threshold = 15.0;
@@ -122,15 +143,17 @@ JNIEXPORT void JNICALL Java_io_kutu_mempressure_MemPressure_start(
     int rc = mp_init(&cfg);
     free(path_copy);
     if (rc != 0 && rc != -EALREADY) {
-        (*env)->ThrowNew(
-            env, (*env)->FindClass(env, "io/kutu/mempressure/MemPressure$MemPressureException"),
-            "mp_init failed");
+        throw_mp(env, "mp_init failed", rc);
     }
 }
 
 JNIEXPORT void JNICALL Java_io_kutu_mempressure_MemPressure_stop(JNIEnv *env, jclass cls) {
     (void)cls;
-    mp_shutdown();
+    int rc = mp_shutdown();
+    if (rc == -EDEADLK) {
+        throw_mp(env, "stop() cannot be called from a pressure callback", rc);
+        return;
+    }
     pthread_mutex_lock(&g_registry.lock);
     for (size_t i = 0; i < g_registry.count; i++) {
         (*env)->DeleteGlobalRef(env, g_registry.items[i]->cb_ref);
@@ -149,11 +172,9 @@ JNIEXPORT jint JNICALL Java_io_kutu_mempressure_MemPressure_currentLevel(JNIEnv 
 JNIEXPORT jdoubleArray JNICALL Java_io_kutu_mempressure_MemPressure_psi(JNIEnv *env, jclass cls) {
     (void)cls;
     mp_psi_t psi = {0};
-    if (mp_psi(&psi) != 0) {
-        jclass ex = (*env)->FindClass(env, "io/kutu/mempressure/MemPressure$MemPressureException");
-        if (ex) {
-            (*env)->ThrowNew(env, ex, "monitor not started");
-        }
+    int rc = mp_psi(&psi);
+    if (rc != 0) {
+        throw_mp(env, "monitor not started", rc);
         return NULL;
     }
     jdoubleArray out = (*env)->NewDoubleArray(env, 6);
@@ -171,21 +192,34 @@ JNIEXPORT jdoubleArray JNICALL Java_io_kutu_mempressure_MemPressure_psi(JNIEnv *
 JNIEXPORT jint JNICALL Java_io_kutu_mempressure_MemPressure_subscribe(
     JNIEnv *env, jclass cls, jobject cb) {
     (void)cls;
+    if (!cb) {
+        jclass npe = (*env)->FindClass(env, "java/lang/NullPointerException");
+        if (npe) {
+            (*env)->ThrowNew(env, npe, "cb");
+        }
+        return -EINVAL;
+    }
+    jclass c = (*env)->GetObjectClass(env, cb);
+    jmethodID mid = c ? (*env)->GetMethodID(env, c, "onPressure", "(I)V") : NULL;
+    if (!mid) {
+        return -EINVAL;
+    }
     jsub_t *js = malloc(sizeof *js);
     if (!js) {
+        throw_mp(env, "subscribe failed", -ENOMEM);
         return -ENOMEM;
     }
+    js->mid = mid;
     js->cb_ref = (*env)->NewGlobalRef(env, cb);
     if (!js->cb_ref) {
         free(js);
         return -ENOMEM;
     }
-    jclass c = (*env)->GetObjectClass(env, cb);
-    js->mid = (*env)->GetMethodID(env, c, "onPressure", "(I)V");
     int handle = mp_subscribe(jni_trampoline, js);
     if (handle < 0) {
         (*env)->DeleteGlobalRef(env, js->cb_ref);
         free(js);
+        throw_mp(env, "mp_subscribe failed", handle);
         return handle;
     }
     js->handle = handle;
