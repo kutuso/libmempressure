@@ -8,7 +8,8 @@
 
 #include <mempressure.h>
 
-#include <atomic>
+#include <cerrno>
+#include <mutex>
 #include <functional>
 #include <stdexcept>
 #include <string>
@@ -65,16 +66,26 @@ class Monitor {
     Monitor &operator=(Monitor &&) = delete;
 
     void start(const Config &cfg = Config()) {
+        std::lock_guard<std::mutex> guard(registry().lock);
+        if (active_) {
+            return;
+        }
         mp_config_t c = to_c(cfg);
         int rc = mp_init(&c);
         if (rc != 0 && rc != -EALREADY) {
             throw std::runtime_error("mp_init failed: " + std::to_string(rc));
         }
-        refcount()++;
+        registry().count++;
+        active_ = true;
     }
 
     void stop() {
-        if (refcount().load() > 0 && refcount().fetch_sub(1) == 1) {
+        std::lock_guard<std::mutex> guard(registry().lock);
+        if (!active_) {
+            return;
+        }
+        active_ = false;
+        if (--registry().count == 0) {
             mp_shutdown();
         }
     }
@@ -124,9 +135,14 @@ class Monitor {
     }
 
   private:
-    static std::atomic<int> &refcount() {
-        static std::atomic<int> count{0};
-        return count;
+    struct Registry {
+        std::mutex lock;
+        int count = 0;
+    };
+
+    static Registry &registry() {
+        static Registry instance;
+        return instance;
     }
 
     struct Sub {
@@ -135,6 +151,7 @@ class Monitor {
     };
 
     std::vector<Sub> subs_;
+    bool active_ = false;
 };
 
 }  // namespace mp

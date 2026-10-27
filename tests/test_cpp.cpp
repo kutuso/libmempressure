@@ -2,11 +2,14 @@
 #include <mempressure.hpp>
 
 #include <atomic>
+#include <vector>
 #include <chrono>
 #include <cstdio>
 #include <fstream>
 #include <stdexcept>
 #include <thread>
+
+#include <unistd.h>
 
 static void write_psi(const std::string &path, double some10) {
     std::ofstream fh(path);
@@ -28,7 +31,7 @@ static int failures = 0;
     } while (0)
 
 int main() {
-    const std::string path = "/tmp/mp_test_cpp.psi";
+    const std::string path = "/tmp/mp_test_cpp." + std::to_string(getpid()) + ".psi";
     write_psi(path, 0.0);
 
     mp::Config cfg;
@@ -82,6 +85,35 @@ int main() {
         CHECK(clean_hits >= 1);  // delivery continues past a throwing callback
     }
 
+    {
+        mp::Monitor once(cfg);
+        once.start(cfg);
+        once.stop();
+        once.stop();
+        mp_psi_t probe;
+        CHECK(mp_psi(&probe) == -EPERM);
+        once.start(cfg);
+        mp_psi_t snapshot;
+        CHECK(mp_psi(&snapshot) == 0);
+    }
+
+    {
+        std::vector<std::thread> threads;
+        for (int t = 0; t < 4; t++) {
+            threads.emplace_back([&] {
+                for (int i = 0; i < 50; i++) {
+                    mp::Monitor churn(cfg);
+                }
+            });
+        }
+        for (auto &th : threads) {
+            th.join();
+        }
+        mp_psi_t snapshot;
+        CHECK(mp_psi(&snapshot) == -EPERM);
+    }
+
+    unlink(path.c_str());
     if (failures) {
         fprintf(stderr, "CPP TESTS: FAIL (%d)\n", failures);
         return 1;
