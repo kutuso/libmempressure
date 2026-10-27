@@ -16,7 +16,8 @@ target_compile_options(mempressure PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(mempressure PRIVATE Threads::Threads)
 set_target_properties(mempressure PROPERTIES
   VERSION ${PROJECT_VERSION}
-  SOVERSION 0)
+  SOVERSION 0
+  C_VISIBILITY_PRESET hidden)
 
 include(GNUInstallDirs)
 install(TARGETS mempressure)
@@ -33,6 +34,11 @@ add_executable(mp_test tests/test_core.c)
 target_link_libraries(mp_test PRIVATE mempressure)
 target_compile_options(mp_test PRIVATE -Wall -Wextra -Werror)
 add_test(NAME core COMMAND mp_test)
+
+find_program(MP_NM nm)
+if(MP_NM)
+  add_test(NAME symbols COMMAND sh ${PROJECT_SOURCE_DIR}/tests/check_symbols.sh $<TARGET_FILE:mempressure>)
+endif()
 
 add_executable(mp_test_cpp tests/test_cpp.cpp)
 target_link_libraries(mp_test_cpp PRIVATE mempressure)

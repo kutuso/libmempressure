@@ -15,6 +15,12 @@
 extern "C" {
 #endif
 
+#if defined(__GNUC__) || defined(__clang__)
+#define MP_API __attribute__((visibility("default")))
+#else
+#define MP_API
+#endif
+
 #define MP_VERSION "0.2.0"
 #define MP_PSI_PATH_DEFAULT "/proc/pressure/memory"
 
@@ -54,34 +60,34 @@ typedef struct {
  * reporting zero pressure. Returns 0, or -EALREADY if already running,
  * -EAGAIN while a previous monitor is still shutting down, -EINVAL for a
  * bad config, or the errno from the initial read (e.g. -ENOENT). */
-int mp_init(const mp_config_t *cfg);
+MP_API int mp_init(const mp_config_t *cfg);
 
 /* Stop the monitor thread and release everything. The monitor wakes
  * immediately instead of finishing its poll interval. Idempotent;
  * returns -EDEADLK if called from a callback on the monitor thread. */
-int mp_shutdown(void);
+MP_API int mp_shutdown(void);
 
 /* Current (post-hysteresis) pressure level. Valid after mp_init. */
-mp_level_t mp_current_level(void);
+MP_API mp_level_t mp_current_level(void);
 
 /* Last observed PSI values; returns 0, or -EPERM if mp_init was not called. */
-int mp_psi(mp_psi_t *out);
+MP_API int mp_psi(mp_psi_t *out);
 
 /* Register a callback fired from the monitor thread whenever the level
  * changes. Returns a handle (> 0), or -EINVAL (NULL cb), -EPERM (not
  * initialized). Callbacks must not block; do not call mp_shutdown from a
  * callback. */
-int mp_subscribe(mp_callback_t cb, void *userdata);
+MP_API int mp_subscribe(mp_callback_t cb, void *userdata);
 
 /* Remove a subscription. Once this returns, the callback and userdata are
  * guaranteed not to be invoked again and may be released: from other
  * threads it waits for any in-progress dispatch of this subscription to
  * finish, and from inside a callback (any handle, including the one
  * firing) it cancels without waiting. Returns 0, or -ENOENT. */
-int mp_unsubscribe(int handle);
+MP_API int mp_unsubscribe(int handle);
 
-const char *mp_level_name(mp_level_t level);
-const char *mp_version(void);
+MP_API const char *mp_level_name(mp_level_t level);
+MP_API const char *mp_version(void);
 
 #ifdef __cplusplus
 }

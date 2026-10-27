@@ -10,6 +10,8 @@ setup(
             ],
             include_dirs=["include"],
             define_macros=[("_GNU_SOURCE", "1")],
+            extra_compile_args=["-fvisibility=hidden"],
+            libraries=["pthread"],
         )
     ]
 )
