@@ -101,7 +101,8 @@ static void test_parse(void) {
     current_test = "parse";
     const char *path = fx("parse");
     write_psi(path, 3.5, 1.25);
-    CHECK(mp_init(NULL) == 0);
+    mp_config_t defaults = {.psi_path = path};
+    CHECK(mp_init(&defaults) == 0);
     mp_shutdown();
 
     mp_config_t cfg = test_config(path);
@@ -301,7 +302,7 @@ static void test_lifecycle(void) {
     CHECK(mp_init(&(mp_config_t){.critical_threshold = 1.0}) == -EINVAL);
     CHECK(mp_init(&(mp_config_t){.poll_interval_sec = -1}) == -EINVAL);
     CHECK(mp_init(&(mp_config_t){.hysteresis = -3}) == -EINVAL);
-    CHECK(mp_init(&(mp_config_t){.low_threshold = 7}) == 0);
+    CHECK(mp_init(&(mp_config_t){.low_threshold = 7, .psi_path = path}) == 0);
     mp_psi_t partial = {0};
     CHECK(mp_psi(&partial) == 0 && partial.some_avg10 == 0.0);
     CHECK(mp_shutdown() == 0);

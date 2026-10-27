@@ -185,8 +185,12 @@ static mp_level_t level_for(const mp_psi_t *psi, const mp_config_t *cfg) {
 
 static void *monitor_main(void *arg) {
     (void)arg;
-    const mp_config_t cfg = g.cfg;
-    const char *psi_path = g.psi_path;
+    mp_config_t cfg;
+    const char *psi_path;
+    pthread_mutex_lock(&g.lock);
+    cfg = g.cfg;
+    psi_path = g.psi_path;
+    pthread_mutex_unlock(&g.lock);
     while (1) {
         pthread_mutex_lock(&g.lock);
         int running = g.running;
