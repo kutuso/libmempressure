@@ -22,7 +22,7 @@ jobs:
         run: pip install pytest
       - name: configure + build (python binding pinned to CI python, jdk autodetected)
         run: |
-          cmake -S . -B build -DPython3_EXECUTABLE=$(which python3)
+          cmake -S . -B build -DMP_WERROR=ON -DPython3_EXECUTABLE=$(which python3)
           cmake --build build
       - name: ctest (c core, c++ binding, jvm binding)
         run: ctest --test-dir build --output-on-failure
@@ -38,6 +38,7 @@ jobs:
       - name: configure with asan + ubsan
         run: |
           cmake -S . -B build \
+            -DMP_WERROR=ON \
             -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -g" \
             -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -g" \
             -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined" \
