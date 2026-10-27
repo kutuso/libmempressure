@@ -1,9 +1,10 @@
 import ctypes
+import os
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-BUILD = REPO / "build"
+BUILD = Path(os.environ.get("MP_BUILD_DIR", REPO / "build")).resolve()
 
 
 def _find(pattern: str) -> Path:

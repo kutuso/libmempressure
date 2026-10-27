@@ -4,13 +4,24 @@
 
 #include <Python.h>
 #include <errno.h>
+#include <string.h>
 
 static PyObject *g_handles = NULL;
 static int g_started = 0;
 
+static PyObject *mp_error(const char *what, int rc) {
+    return PyErr_Format(PyExc_RuntimeError, "%s: %s (%d)", what, strerror(-rc), rc);
+}
+
 static void py_trampoline(mp_level_t level, void *userdata) {
+#if PY_VERSION_HEX >= 0x030D0000
+    if (Py_IsFinalizing()) {
+        return;
+    }
+#endif
     PyGILState_STATE gstate = PyGILState_Ensure();
     PyObject *cb = (PyObject *)userdata;
+    Py_INCREF(cb);
     PyObject *arg = PyLong_FromLong((long)level);
     if (arg) {
         PyObject *result = PyObject_CallFunctionObjArgs(cb, arg, NULL);
@@ -20,6 +31,7 @@ static void py_trampoline(mp_level_t level, void *userdata) {
         Py_XDECREF(result);
         Py_DECREF(arg);
     }
+    Py_DECREF(cb);
     PyGILState_Release(gstate);
 }
 
@@ -45,8 +57,7 @@ static PyObject *py_start(PyObject *self, PyObject *args, PyObject *kwds) {
         Py_RETURN_TRUE;
     }
     if (rc != 0) {
-        PyErr_Format(PyExc_RuntimeError, "mp_init failed: %d", rc);
-        return NULL;
+        return mp_error("mp_init failed", rc);
     }
     g_started = 1;
     Py_RETURN_TRUE;
@@ -55,9 +66,14 @@ static PyObject *py_start(PyObject *self, PyObject *args, PyObject *kwds) {
 static PyObject *py_stop(PyObject *self, PyObject *args) {
     (void)self;
     (void)args;
+    int rc = 0;
     Py_BEGIN_ALLOW_THREADS
-    mp_shutdown();
+    rc = mp_shutdown();
     Py_END_ALLOW_THREADS
+    if (rc == -EDEADLK) {
+        PyErr_SetString(PyExc_RuntimeError, "stop() cannot be called from a pressure callback");
+        return NULL;
+    }
     if (g_handles) {
         PyDict_Clear(g_handles);
     }
@@ -86,8 +102,7 @@ static PyObject *py_psi(PyObject *self, PyObject *args) {
     mp_psi_t psi = {0};
     int rc = mp_psi(&psi);
     if (rc != 0) {
-        PyErr_Format(PyExc_RuntimeError, "mp_psi failed: %d (not started?)", rc);
-        return NULL;
+        return mp_error("mp_psi failed (not started?)", rc);
     }
     return Py_BuildValue("{s:d,s:d,s:d,s:d,s:d,s:d}", "some_avg10", psi.some_avg10,
                          "some_avg60", psi.some_avg60, "some_avg300", psi.some_avg300,
@@ -104,8 +119,7 @@ static PyObject *py_subscribe(PyObject *self, PyObject *callback) {
     if (!g_started) {
         int rc = mp_init(NULL);
         if (rc != 0 && rc != -EALREADY) {
-            PyErr_Format(PyExc_RuntimeError, "mp_init failed: %d", rc);
-            return NULL;
+            return mp_error("mp_init failed", rc);
         }
         g_started = 1;
     }
@@ -113,8 +127,7 @@ static PyObject *py_subscribe(PyObject *self, PyObject *callback) {
     int handle = mp_subscribe(py_trampoline, callback);
     if (handle < 0) {
         Py_DECREF(callback);
-        PyErr_Format(PyExc_RuntimeError, "mp_subscribe failed: %d", handle);
-        return NULL;
+        return mp_error("mp_subscribe failed", handle);
     }
     PyObject *key = PyLong_FromLong(handle);
     if (!key || PyDict_SetItem(g_handles, key, callback) != 0) {
@@ -149,14 +162,18 @@ static PyObject *py_unsubscribe(PyObject *self, PyObject *args) {
         return NULL;
     }
     if (rc != 0) {
-        PyErr_Format(PyExc_RuntimeError, "mp_unsubscribe failed: %d", rc);
-        return NULL;
+        return mp_error("mp_unsubscribe failed", rc);
     }
     PyObject *key = PyLong_FromLong(handle);
+    if (!key) {
+        return NULL;
+    }
     PyObject *cb = PyDict_GetItemWithError(g_handles, key);
     if (cb) {
         Py_INCREF(cb);
-        PyDict_DelItem(g_handles, key);
+        if (PyDict_DelItem(g_handles, key) != 0) {
+            PyErr_Clear();
+        }
         Py_DECREF(cb);
     } else if (PyErr_Occurred()) {
         PyErr_Clear();
@@ -166,7 +183,7 @@ static PyObject *py_unsubscribe(PyObject *self, PyObject *args) {
 }
 
 static PyMethodDef methods[] = {
-    {"start", (PyCFunction)py_start, METH_VARARGS | METH_KEYWORDS,
+    {"start", (PyCFunction)(void (*)(void))py_start, METH_VARARGS | METH_KEYWORDS,
      "start(low=5.0, moderate=15.0, critical=40.0, interval=0.5, hysteresis=2, psi_path=None)\n\n"
      "Start the pressure monitor. Re-starting with a live monitor is a no-op."},
     {"stop", py_stop, METH_NOARGS, "Stop the monitor and release everything."},
@@ -195,29 +212,37 @@ static struct PyModuleDef module_def = {
     free_module_state,
 };
 
+static int register_atexit_stop(PyObject *module) {
+    PyObject *atexit_mod = PyImport_ImportModule("atexit");
+    if (!atexit_mod) {
+        return -1;
+    }
+    PyObject *stop = PyObject_GetAttrString(module, "stop");
+    PyObject *res = stop ? PyObject_CallMethod(atexit_mod, "register", "O", stop) : NULL;
+    Py_XDECREF(stop);
+    Py_DECREF(atexit_mod);
+    if (!res) {
+        return -1;
+    }
+    Py_DECREF(res);
+    return 0;
+}
+
 PyMODINIT_FUNC PyInit_mempressure(void) {
-    g_handles = PyDict_New();
     if (!g_handles) {
-        return NULL;
+        g_handles = PyDict_New();
+        if (!g_handles) {
+            return NULL;
+        }
     }
     PyObject *module = PyModule_Create(&module_def);
     if (!module) {
-        Py_DECREF(g_handles);
-        g_handles = NULL;
-        return NULL;
-    }
-    if (PyModule_AddStringConstant(module, "__version__", MP_VERSION) != 0) {
-        Py_DECREF(module);
-        Py_DECREF(g_handles);
-        g_handles = NULL;
+        Py_CLEAR(g_handles);
         return NULL;
     }
     PyObject *levels = PyDict_New();
     if (!levels) {
-        Py_DECREF(module);
-        Py_DECREF(g_handles);
-        g_handles = NULL;
-        return NULL;
+        goto fail;
     }
     static const struct {
         const char *name;
@@ -233,19 +258,23 @@ PyMODINIT_FUNC PyInit_mempressure(void) {
         if (!num || PyDict_SetItemString(levels, level_entries[i].name, num) != 0) {
             Py_XDECREF(num);
             Py_DECREF(levels);
-            Py_DECREF(module);
-            Py_DECREF(g_handles);
-            g_handles = NULL;
-            return NULL;
+            goto fail;
         }
         Py_DECREF(num);
     }
     if (PyModule_AddObject(module, "LEVELS", levels) != 0) {
         Py_DECREF(levels);
-        Py_DECREF(module);
-        Py_DECREF(g_handles);
-        g_handles = NULL;
-        return NULL;
+        goto fail;
+    }
+    if (PyModule_AddStringConstant(module, "__version__", MP_VERSION) != 0) {
+        goto fail;
+    }
+    if (register_atexit_stop(module) != 0) {
+        goto fail;
     }
     return module;
+
+fail:
+    Py_DECREF(module);
+    return NULL;
 }
