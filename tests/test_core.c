@@ -234,6 +234,28 @@ static void test_unsubscribe_from_callback(void) {
     mp_shutdown();
 }
 
+static atomic_int shutdown_rc;
+
+static void shutdown_cb(mp_level_t level, void *userdata) {
+    (void)level;
+    (void)userdata;
+    atomic_store(&shutdown_rc, mp_shutdown());
+}
+
+static void test_shutdown_from_callback(void) {
+    current_test = "shutdown-from-callback";
+    const char *path = fx("shutcb");
+    write_psi(path, 0.0, 0.0);
+    mp_config_t cfg = test_config(path);
+    CHECK(mp_init(&cfg) == 0);
+    atomic_store(&shutdown_rc, 1);
+    CHECK(mp_subscribe(shutdown_cb, NULL) > 0);
+    write_psi(path, 60.0, 0.0);
+    CHECK(WAIT_FOR(atomic_load(&shutdown_rc) != 1, 2000));
+    CHECK(atomic_load(&shutdown_rc) == -EDEADLK);
+    CHECK(mp_shutdown() == 0);
+}
+
 static atomic_int quiesce_hits;
 
 static void quiesce_cb(mp_level_t level, void *userdata) {
@@ -312,6 +334,7 @@ int main(void) {
     test_callback_fires_on_change();
     test_unsubscribe_from_callback();
     test_unsubscribe_quiesces();
+    test_shutdown_from_callback();
     test_lifecycle();
     if (failures) {
         fprintf(stderr, "C TESTS: FAIL (%d failures)\n", failures);
