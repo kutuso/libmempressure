@@ -3,7 +3,6 @@
 #include "mempressure.h"
 
 #include <errno.h>
-#include <locale.h>
 #include <math.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -69,6 +68,39 @@ static void wait_interval(double seconds) {
     pthread_mutex_unlock(&g.lock);
 }
 
+static int parse_decimal(const char *s, size_t len, double *out) {
+    unsigned long long mant = 0;
+    unsigned long long scale = 1;
+    size_t digits = 0;
+    size_t i = 0;
+    int frac = 0;
+    if (len == 0) {
+        return 0;
+    }
+    for (; i < len; i++) {
+        char c = s[i];
+        if (c == '.' && !frac) {
+            frac = 1;
+            continue;
+        }
+        if (c < '0' || c > '9') {
+            return 0;
+        }
+        if (++digits > 15) {
+            return 0;
+        }
+        mant = mant * 10 + (unsigned)(c - '0');
+        if (frac) {
+            scale *= 10;
+        }
+    }
+    if (digits == 0) {
+        return 0;
+    }
+    *out = (double)mant / (double)scale;
+    return 1;
+}
+
 static int parse_line(const char *line, const char *kind, mp_psi_t *out) {
     size_t klen = strlen(kind);
     if (strncmp(line, kind, klen) != 0) {
@@ -78,39 +110,38 @@ static int parse_line(const char *line, const char *kind, mp_psi_t *out) {
     if (*cursor != ' ' && *cursor != '\t') {
         return 0;
     }
-    static locale_t c_loc;
-    if (!c_loc) {
-        c_loc = newlocale(LC_NUMERIC_MASK, "C", (locale_t)0);
-    }
+    int is_some = strcmp(kind, "some") == 0;
     int have_avg10 = 0;
     int have_avg60 = 0;
     int have_avg300 = 0;
-    while (*cursor == ' ' || *cursor == '\t') cursor++;
-    char key[8];
-    while (sscanf(cursor, "%7[a-z0-9_]=", key) == 1) {
-        cursor += strlen(key) + 1;
-        char *end = NULL;
-        double value = c_loc ? strtod_l(cursor, &end, c_loc) : strtod(cursor, &end);
-        if (end == cursor) {
-            break;
-        }
-        if (isfinite(value)) {
-            int is_some = strcmp(kind, "some") == 0;
-            if (strcmp(key, "avg10") == 0 && !have_avg10) {
-                if (is_some) out->some_avg10 = value; else out->full_avg10 = value;
-                have_avg10 = 1;
-            } else if (strcmp(key, "avg60") == 0 && !have_avg60) {
-                if (is_some) out->some_avg60 = value; else out->full_avg60 = value;
-                have_avg60 = 1;
-            } else if (strcmp(key, "avg300") == 0 && !have_avg300) {
-                if (is_some) out->some_avg300 = value; else out->full_avg300 = value;
-                have_avg300 = 1;
-            }
-        }
-        cursor = end;
-        while (*cursor && *cursor != ' ' && *cursor != '\t') cursor++;
+    while (*cursor) {
         while (*cursor == ' ' || *cursor == '\t') cursor++;
-        if (!*cursor) break;
+        const char *tok = cursor;
+        while (*cursor && *cursor != ' ' && *cursor != '\t' && *cursor != '\n' &&
+               *cursor != '\r') {
+            cursor++;
+        }
+        size_t tlen = (size_t)(cursor - tok);
+        while (*cursor == '\n' || *cursor == '\r') cursor++;
+        const char *eq = memchr(tok, '=', tlen);
+        if (!eq) {
+            continue;
+        }
+        size_t keylen = (size_t)(eq - tok);
+        double value;
+        if (!parse_decimal(eq + 1, tlen - keylen - 1, &value) || value > 100.0) {
+            continue;
+        }
+        if (keylen == 5 && memcmp(tok, "avg10", 5) == 0 && !have_avg10) {
+            if (is_some) out->some_avg10 = value; else out->full_avg10 = value;
+            have_avg10 = 1;
+        } else if (keylen == 5 && memcmp(tok, "avg60", 5) == 0 && !have_avg60) {
+            if (is_some) out->some_avg60 = value; else out->full_avg60 = value;
+            have_avg60 = 1;
+        } else if (keylen == 6 && memcmp(tok, "avg300", 6) == 0 && !have_avg300) {
+            if (is_some) out->some_avg300 = value; else out->full_avg300 = value;
+            have_avg300 = 1;
+        }
     }
     return have_avg10 && have_avg60 && have_avg300;
 }

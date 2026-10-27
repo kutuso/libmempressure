@@ -9,6 +9,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <dirent.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 static int failures = 0;
@@ -22,6 +24,40 @@ static const char *current_test = "";
             failures++;                                                        \
         }                                                                      \
     } while (0)
+
+static char tmpdir[64];
+
+static const char *fx(const char *name) {
+    static char bufs[8][128];
+    static int next;
+    char *buf = bufs[next++ % 8];
+    snprintf(buf, sizeof bufs[0], "%s/%s.psi", tmpdir, name);
+    return buf;
+}
+
+static void cleanup_tmpdir(void) {
+    DIR *dir = opendir(tmpdir);
+    if (dir) {
+        struct dirent *ent;
+        while ((ent = readdir(dir))) {
+            char path[sizeof tmpdir + 300];
+            snprintf(path, sizeof path, "%s/%s", tmpdir, ent->d_name);
+            unlink(path);
+        }
+        closedir(dir);
+    }
+    rmdir(tmpdir);
+}
+
+static void write_raw(const char *path, const char *text) {
+    FILE *fh = fopen(path, "w");
+    if (!fh) {
+        perror(path);
+        exit(2);
+    }
+    fputs(text, fh);
+    fclose(fh);
+}
 
 static void write_psi(const char *path, double some10, double full10) {
     FILE *fh = fopen(path, "w");
@@ -63,7 +99,7 @@ static mp_config_t test_config(const char *path) {
 
 static void test_parse(void) {
     current_test = "parse";
-    const char *path = "/tmp/mp_test_parse.psi";
+    const char *path = fx("parse");
     write_psi(path, 3.5, 1.25);
     CHECK(mp_init(NULL) == 0);
     mp_shutdown();
@@ -78,9 +114,57 @@ static void test_parse(void) {
     mp_shutdown();
 }
 
+static void test_parse_robustness(void) {
+    current_test = "parse-robustness";
+    const char *path = fx("robust");
+    mp_config_t cfg = test_config(path);
+    mp_psi_t psi = {0};
+
+    write_raw(path,
+              "some a_very_long_future_key=1 avg10=2.50 avg60=3.00 avg300=4.00 total=9\r\n"
+              "full avg10=0.50 avg60=0.00 avg300=0.00 total=0 extra=7\n");
+    CHECK(mp_init(&cfg) == 0);
+    CHECK(mp_psi(&psi) == 0);
+    CHECK(psi.some_avg10 == 2.5 && psi.some_avg60 == 3.0 && psi.some_avg300 == 4.0);
+    CHECK(psi.full_avg10 == 0.5);
+    mp_shutdown();
+
+    write_raw(path,
+              "some avg10=-2.00 avg60=0.00 avg300=0.00 total=0\n"
+              "full avg10=0.00 avg60=0.00 avg300=0.00 total=0\n");
+    CHECK(mp_init(&cfg) == -EIO);
+
+    write_raw(path,
+              "some avg10=1e1 avg60=0.00 avg300=0.00 total=0\n"
+              "full avg10=0.00 avg60=0.00 avg300=0.00 total=0\n");
+    CHECK(mp_init(&cfg) == -EIO);
+
+    write_raw(path,
+              "some avg10=nan avg60=0.00 avg300=0.00 total=0\n"
+              "full avg10=0.00 avg60=0.00 avg300=0.00 total=0\n");
+    CHECK(mp_init(&cfg) == -EIO);
+
+    write_raw(path,
+              "some avg10=250.00 avg60=0.00 avg300=0.00 total=0\n"
+              "full avg10=0.00 avg60=0.00 avg300=0.00 total=0\n");
+    CHECK(mp_init(&cfg) == -EIO);
+
+    write_raw(path, "some avg10=1.00 avg60=0.00 avg300=0.00 total=0\n");
+    CHECK(mp_init(&cfg) == -EIO);
+
+    write_raw(path, "");
+    CHECK(mp_init(&cfg) == -EIO);
+
+    write_raw(path,
+              "somewhat avg10=1.00 avg60=0.00 avg300=0.00\n"
+              "fullest avg10=1.00 avg60=0.00 avg300=0.00\n");
+    CHECK(mp_init(&cfg) == -EIO);
+    CHECK(mp_shutdown() == 0);
+}
+
 static void test_levels(void) {
     current_test = "levels";
-    const char *path = "/tmp/mp_test_levels.psi";
+    const char *path = fx("levels");
     write_psi(path, 0.0, 0.0);
     mp_config_t cfg = test_config(path);
     CHECK(mp_init(&cfg) == 0);
@@ -107,7 +191,7 @@ static void on_level(mp_level_t level, void *userdata) {
 
 static void test_callback_fires_on_change(void) {
     current_test = "callback";
-    const char *path = "/tmp/mp_test_callback.psi";
+    const char *path = fx("callback");
     write_psi(path, 0.0, 0.0);
     mp_config_t cfg = test_config(path);
     CHECK(mp_init(&cfg) == 0);
@@ -136,7 +220,7 @@ static void unsub_self(mp_level_t level, void *userdata) {
 
 static void test_unsubscribe_from_callback(void) {
     current_test = "unsubscribe-from-callback";
-    const char *path = "/tmp/mp_test_unsub.psi";
+    const char *path = fx("unsub");
     write_psi(path, 0.0, 0.0);
     mp_config_t cfg = test_config(path);
     CHECK(mp_init(&cfg) == 0);
@@ -160,7 +244,7 @@ static void quiesce_cb(mp_level_t level, void *userdata) {
 
 static void test_unsubscribe_quiesces(void) {
     current_test = "unsubscribe-quiesces";
-    const char *path = "/tmp/mp_test_quiesce.psi";
+    const char *path = fx("quiesce");
     write_psi(path, 0.0, 0.0);
     mp_config_t cfg = test_config(path);
     CHECK(mp_init(&cfg) == 0);
@@ -184,7 +268,7 @@ static void test_unsubscribe_quiesces(void) {
 
 static void test_lifecycle(void) {
     current_test = "lifecycle";
-    const char *path = "/tmp/mp_test_lifecycle.psi";
+    const char *path = fx("lifecycle");
     write_psi(path, 0.0, 0.0);
     mp_config_t cfg = test_config(path);
 
@@ -199,7 +283,7 @@ static void test_lifecycle(void) {
     mp_psi_t partial = {0};
     CHECK(mp_psi(&partial) == 0 && partial.some_avg10 == 0.0);
     CHECK(mp_shutdown() == 0);
-    cfg.psi_path = "/tmp/mp_test_missing.psi";
+    cfg.psi_path = fx("missing");
     unlink(cfg.psi_path);
     CHECK(mp_init(&cfg) == -ENOENT);
     cfg.psi_path = path;
@@ -216,7 +300,14 @@ static void test_lifecycle(void) {
 }
 
 int main(void) {
+    snprintf(tmpdir, sizeof tmpdir, "/tmp/mp_test.XXXXXX");
+    if (!mkdtemp(tmpdir)) {
+        perror("mkdtemp");
+        return 2;
+    }
+    atexit(cleanup_tmpdir);
     test_parse();
+    test_parse_robustness();
     test_levels();
     test_callback_fires_on_change();
     test_unsubscribe_from_callback();
