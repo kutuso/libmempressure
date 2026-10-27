@@ -1,3 +1,11 @@
+libmempressure (0.2.1) unstable; urgency=medium
+
+  * Locale-free PSI parser that rejects out-of-range values.
+  * Monotonic poll clock, handle counter overflow fix, monitor config race fix.
+  * Export only the mp_ API; harden the Python, JNI and C++ bindings.
+
+ -- kutu OS contributors <release@kutu.so>  Wed, 28 Oct 2026 12:00:00 +0000
+
 libmempressure (0.2.0) unstable; urgency=medium
 
   * Quiescing mp_unsubscribe: safe callback teardown from any thread.

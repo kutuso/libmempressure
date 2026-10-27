@@ -1,7 +1,7 @@
 # Maintainer: kutu OS contributors <release@kutu.so>
 
 pkgname=libmempressure
-pkgver=0.2.0
+pkgver=0.2.1
 pkgrel=1
 pkgdesc='Memory-pressure events from kernel PSI for applications, an onTrimMemory for Linux'
 arch=('x86_64' 'aarch64')

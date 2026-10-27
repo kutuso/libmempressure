@@ -2,7 +2,7 @@
 
 pkgname=python-mempressure
 _pkgname=libmempressure
-pkgver=0.2.0
+pkgver=0.2.1
 pkgrel=1
 pkgdesc='Python binding for libmempressure: memory-pressure events from kernel PSI'
 arch=('x86_64' 'aarch64')

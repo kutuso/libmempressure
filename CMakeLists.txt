@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 project(mempressure
-  VERSION 0.2.0
+  VERSION 0.2.1
   DESCRIPTION "libmempressure: a Linux answer to Android's onTrimMemory"
   HOMEPAGE_URL "https://github.com/kutuso/libmempressure"
   LANGUAGES C)

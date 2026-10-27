@@ -21,7 +21,7 @@ extern "C" {
 #define MP_API
 #endif
 
-#define MP_VERSION "0.2.0"
+#define MP_VERSION "0.2.1"
 #define MP_PSI_PATH_DEFAULT "/proc/pressure/memory"
 
 typedef enum {
