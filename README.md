@@ -102,8 +102,15 @@ pip install libmempressure
 
 ```sh
 make test          # cmake build + ctest (C core, C++ binding, JVM binding)
-                   # + python binding tests (needs a venv with pytest, see below)
+                   # + python binding tests (needs pytest)
+make asan          # the same suites under AddressSanitizer + UBSan
 ```
+
+CMake options: `-DMP_WERROR=ON` (warnings are errors; off by default so a
+new compiler cannot break a distro build), `-DMP_BUILD_TESTS=OFF` (library
+and headers only; no C++ compiler needed), `-DMP_PYTHON=ON|OFF|AUTO`,
+`-DMP_JAVA=ON|OFF|AUTO`. The Python tests honour `MP_BUILD_DIR` to pick the
+build tree under test.
 
 Details:
 
@@ -112,7 +119,7 @@ cmake -S . -B build                # auto-detects Python dev + JDK; skips gracef
 cmake --build build
 ctest --test-dir build --output-on-failure
 python3 -m venv .venv && .venv/bin/pip install pytest
-.venv/bin/pytest tests/python -q   # (build with -DPython3_EXECUTABLE=.venv/bin/python
+MP_BUILD_DIR=build .venv/bin/pytest tests/python -q   # (build with -DPython3_EXECUTABLE=.venv/bin/python
                                    #  if your system python differs from the venv's)
 ```
 
@@ -148,6 +155,12 @@ Distro packages ship the C core and the header-only C++ binding
 are built from the same source wherever those toolchains live. CI exercises
 both paths on every push: `package-rpm` (fedora container) and
 `package-deb` (debian container) build and inspect the actual packages.
+
+- **Arch / AUR**: [`packaging/aur/libmempressure/PKGBUILD`](packaging/aur/libmempressure/PKGBUILD)
+  (C library, headers, pkg-config) and
+  [`packaging/aur/python-mempressure/PKGBUILD`](packaging/aur/python-mempressure/PKGBUILD)
+  (Python binding). Both fetch the `v<version>` GitHub tag tarball; replace
+  the `SKIP` checksum with `updpkgsums` before publishing.
 
 ## Relationship to kutu OS
 
